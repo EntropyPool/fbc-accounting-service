@@ -114,17 +114,6 @@ type DerivedGasOutputs struct {
 	ActorName          string `gorm:"column:actor_name"`
 }
 
-func (cli *PostgresCli) QueryMinerPreCommitInfo(minerId string) (*MinerPreCommitInfos, error) {
-	var info MinerPreCommitInfos
-	var count int
-	cli.db.Where("miner_id = ?", minerId).Find(&info).Count(&count)
-	if count == 0 {
-		return nil, xerrors.Errorf("cannot find any value")
-	}
-
-	return &info, nil
-}
-
 func (cli *PostgresCli) InsertMinerPreCommitInfo(info MinerPreCommitInfos) error {
 	couldBeUpdated := false
 
@@ -148,4 +137,51 @@ func (cli *PostgresCli) InsertMinerPreCommitInfo(info MinerPreCommitInfos) error
 
 	rc := cli.db.Create(updateInfo)
 	return rc.Error
+}
+
+func (cli *PostgresCli) QueryDerivedGasOutputs(to string, beginHeight int64, endHeight int64) (*DerivedGasOutputs, error) {
+
+	var info DerivedGasOutputs
+	var count int
+	cli.db.Where("\"to\" = ? AND height >= ? AND height<= ? ", to, beginHeight, endHeight).Find(&info).Count(&count)
+	if count == 0 {
+		return nil, xerrors.Errorf("cannot find any value")
+	}
+
+	return &info, nil
+
+}
+
+func (cli *PostgresCli) QueryMinerSectorInfos(minerId string, beginHeight int64, endHeight int64) (*MinerSectorInfos, error) {
+
+	var info MinerSectorInfos
+	var count int
+	cli.db.Where("miner_id = ? AND height >=? AND height <=?", minerId, beginHeight, endHeight).Find(&info).Count(&count)
+	if count == 0 {
+		return nil, xerrors.Errorf("cannot find any value")
+	}
+
+	return &info, nil
+}
+
+func (cli *PostgresCli) QueryMinerPreCommitInfo(minerId string) (*MinerPreCommitInfos, error) {
+	var info MinerPreCommitInfos
+	var count int
+	cli.db.Where("miner_id = ?", minerId).Find(&info).Count(&count)
+	if count == 0 {
+		return nil, xerrors.Errorf("cannot find any value")
+	}
+
+	return &info, nil
+}
+
+func (cli *PostgresCli) QueryMinerPreCommitInfoAndSectorId(minerId string, sectorId int) (*MinerPreCommitInfos, error) {
+	var info MinerPreCommitInfos
+	var count int
+	cli.db.Where("miner_id = ? and sector_id= ?", minerId, sectorId).Find(&info).Count(&count)
+	if count == 0 {
+		return nil, xerrors.Errorf("cannot find any value")
+	}
+
+	return &info, nil
 }
