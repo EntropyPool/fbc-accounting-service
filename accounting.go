@@ -8,9 +8,9 @@ import (
 	fbcpostgres "github.com/EntropyPool/fbc-accounting-service/postgres"
 	types "github.com/EntropyPool/fbc-accounting-service/types"
 	httpdaemon "github.com/NpoolRD/http-daemon"
+	"github.com/tealeg/xlsx"
 	"io/ioutil"
 	"net/http"
-	"github.com/tealeg/xlsx"
 	"strconv"
 	_ "strings"
 	"sync/atomic"
@@ -157,6 +157,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	cell.Value = "lockedFunds"
 	cell = row.AddCell()
 	cell.Value = "initialPledge"
+	cell = row.AddCell()
+	cell.Value = "balance at height"
 
 	for i := realStartHeight; i < realEndHeight; i++ {
 		// table derived_gas_outputs
@@ -198,6 +200,7 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 		var preCommitDeposits interface{}
 		var lockedFunds interface{}
 		var initialPledge interface{}
+		var balance interface{}
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			fmt.Println(cid)
@@ -217,6 +220,17 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					fmt.Println(lockedFunds)
 					initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
 					fmt.Println(initialPledge)
+				}
+				var stateMinerInfoMap map[string]interface{}
+				stateMinerInfoResult := StateMinerInfo(minerId, cidStr)
+				if err := json.Unmarshal([]byte(stateMinerInfoResult), &stateMinerInfoMap); err == nil {
+					workerId := stateMinerInfoMap["result"].(map[string]interface{})["Worker"]
+					workerIdStr := workerId.(string)
+					var stateGetActorMap map[string]interface{}
+					stateGetActorResult := StateGetActor(workerIdStr, cidStr)
+					if err := json.Unmarshal([]byte(stateGetActorResult), &stateGetActorMap); err == nil {
+						balance = stateGetActorMap["result"].(map[string]interface{})["Balance"]
+					}
 				}
 				row = sheet.AddRow()
 				cell = row.AddCell()
@@ -251,6 +265,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 				cell.Value = lockedFunds.(string)
 				cell = row.AddCell()
 				cell.Value = initialPledge.(string)
+				cell = row.AddCell()
+				cell.Value = balance.(string)
 				file.Save("File.xlsx")
 
 			}
@@ -275,15 +291,27 @@ func GetMinerInfoByMinerIdAndHeight(minerId string, height string) string {
 //  StateMinerAvailableBalance
 func StateMinerAvailableBalance(minerId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerAvailableBalance", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
-	fmt.Println(json)
 	reader := bytes.NewReader([]byte(json))
-
 	return funcHttp(httpUrl, reader)
 }
 
 //  StateReadState
 func StateReadState(minerId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateReadState", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
+	reader := bytes.NewReader([]byte(json))
+	return funcHttp(httpUrl, reader)
+}
+
+// StateMinerInfo return worker
+func StateMinerInfo(minerId string, cid string) string {
+	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerInfo", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
+	reader := bytes.NewReader([]byte(json))
+	return funcHttp(httpUrl, reader)
+}
+
+// StateGetActor  minerId or workerId
+func StateGetActor(minerId string, cid string) string {
+	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateGetActor", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
