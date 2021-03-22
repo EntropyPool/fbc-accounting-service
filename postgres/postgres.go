@@ -18,7 +18,6 @@ type PostgresConfig struct {
 	User    string `json:"user"`
 	Passwd  string `json:"passwd"`
 	DbName  string `json:"db"`
-	Port    string `json:"port"`
 	Sslmode string `json:"sslmode"`
 }
 
@@ -31,8 +30,8 @@ type PostgresCli struct {
 func NewPostgresCli(config PostgresConfig) *PostgresCli {
 	cli := &PostgresCli{
 		config: config,
-		url: fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=%v",
-			config.User, config.Passwd, config.Host, config.Port, config.DbName, config.Sslmode),
+		url: fmt.Sprintf("postgres://%v:%v@%v/%v?sslmode=%v",
+			config.User, config.Passwd, config.Host, config.DbName, config.Sslmode),
 	}
 
 	log.Infof(log.Fields{}, "open postgres db %v", cli.url)
@@ -139,11 +138,11 @@ func (cli *PostgresCli) InsertMinerPreCommitInfo(info MinerPreCommitInfos) error
 	return rc.Error
 }
 
-func (cli *PostgresCli) QueryDerivedGasOutputs(to string, beginHeight int64, endHeight int64) (*DerivedGasOutputs, error) {
+func (cli *PostgresCli) QueryDerivedGasOutputs(to string, i int64) (*DerivedGasOutputs, error) {
 
 	var info DerivedGasOutputs
 	var count int
-	cli.db.Where("\"to\" = ? AND height >= ? AND height<= ? ", to, beginHeight, endHeight).Find(&info).Count(&count)
+	cli.db.Where("\"to\" = ? AND height = ?", to, i).Find(&info).Count(&count)
 	if count == 0 {
 		return nil, xerrors.Errorf("cannot find any value")
 	}
@@ -152,11 +151,11 @@ func (cli *PostgresCli) QueryDerivedGasOutputs(to string, beginHeight int64, end
 
 }
 
-func (cli *PostgresCli) QueryMinerSectorInfos(minerId string, beginHeight int64, endHeight int64) (*MinerSectorInfos, error) {
+func (cli *PostgresCli) QueryMinerSectorInfos(minerId string, i int64) (*MinerSectorInfos, error) {
 
 	var info MinerSectorInfos
 	var count int
-	cli.db.Where("miner_id = ? AND height >=? AND height <=?", minerId, beginHeight, endHeight).Find(&info).Count(&count)
+	cli.db.Where("miner_id = ? AND height =?", minerId, i).Find(&info).Count(&count)
 	if count == 0 {
 		return nil, xerrors.Errorf("cannot find any value")
 	}
