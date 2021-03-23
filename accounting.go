@@ -126,11 +126,11 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	//		"MinerPenalty", "MinerTip", "Refund", "GasRefund", "InitialPledge", "ExpectedStoragePledge",
 	//		"minerAvailableBalance", "preCommitDeposits", "lockedFunds", "initialPledge"})
 	cell = row.AddCell()
+	cell.Value = "Cid"
+	cell = row.AddCell()
 	cell.Value = "MinerId"
 	cell = row.AddCell()
 	cell.Value = "height"
-	cell = row.AddCell()
-	cell.Value = "PreCommitDeposit"
 	cell = row.AddCell()
 	cell.Value = "Value"
 	cell = row.AddCell()
@@ -150,6 +150,10 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	cell = row.AddCell()
 	cell.Value = "ExpectedStoragePledge"
 	cell = row.AddCell()
+	cell.Value = "PreCommitDeposit"
+	cell = row.AddCell()
+	cell.Value = "SectorId"
+	cell = row.AddCell()
 	cell.Value = "minerAvailableBalance"
 	cell = row.AddCell()
 	cell.Value = "preCommitDeposits"
@@ -161,41 +165,10 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	cell.Value = "balance at height"
 
 	for i := realStartHeight; i < realEndHeight; i++ {
-		// table derived_gas_outputs
-		derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(to, i)
-		// table miner_sector_infos
-		minerSectorInfos, _ := s.PostgresClient.QueryMinerSectorInfos(minerId, i)
-		// table miner_pre_commit_infos
-		if derivedGasOutputs != nil && minerSectorInfos != nil {
-			minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfoAndSectorId(minerId, minerSectorInfos.SectorId)
-			minerInfo.MinerId = minerId
-			minerInfo.PreCommitDeposit = minerPreCommitInfo.PreCommitDeposit
-			minerInfo.Value = derivedGasOutputs.Value
-			minerInfo.BaseFeeBurn = derivedGasOutputs.BaseFeeBurn
-			minerInfo.OverEstimationBurn = derivedGasOutputs.OverEstimationBurn
-			minerInfo.MinerPenalty = derivedGasOutputs.MinerPenalty
-			minerInfo.MinerTip = derivedGasOutputs.MinerTip
-			minerInfo.Refund = derivedGasOutputs.Refund
-			minerInfo.GasRefund = derivedGasOutputs.GasRefund
-			minerInfo.InitialPledge = minerSectorInfos.InitialPledge
-			minerInfo.ExpectedStoragePledge = minerSectorInfos.ExpectedStoragePledge
-		} else {
-			minerInfo.MinerId = minerId
-			minerInfo.PreCommitDeposit = 0
-			minerInfo.Value = 0
-			minerInfo.BaseFeeBurn = 0
-			minerInfo.OverEstimationBurn = 0
-			minerInfo.MinerPenalty = 0
-			minerInfo.MinerTip = 0
-			minerInfo.Refund = 0
-			minerInfo.GasRefund = 0
-			minerInfo.InitialPledge = 0
-			minerInfo.ExpectedStoragePledge = 0
-		}
+
 		iStr := strconv.FormatInt(i, 10)
 		result := GetMinerInfoByMinerIdAndHeight(minerId, iStr)
 		var resultMap map[string]interface{}
-
 		var minerAvailableBalance interface{}
 		var preCommitDeposits interface{}
 		var lockedFunds interface{}
@@ -203,7 +176,6 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 		var balance interface{}
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
-			fmt.Println(cid)
 			cidStr := cid.(string)
 			minerAvailableBalanceResult := StateMinerAvailableBalance(minerId, cidStr)
 			var minerAvailableBalanceMap map[string]interface{}
@@ -232,48 +204,150 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 						balance = stateGetActorMap["result"].(map[string]interface{})["Balance"]
 					}
 				}
-				row = sheet.AddRow()
-				cell = row.AddCell()
-				cell.Value = minerInfo.MinerId
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(i, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.PreCommitDeposit, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.Value, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.BaseFeeBurn, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.OverEstimationBurn, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.Itoa(minerInfo.MinerPenalty)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.MinerTip, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.Refund, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.GasRefund, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.InitialPledge, 10)
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(minerInfo.ExpectedStoragePledge, 10)
-				cell = row.AddCell()
-				cell.Value = minerAvailableBalance.(string)
-				cell = row.AddCell()
-				cell.Value = preCommitDeposits.(string)
-				cell = row.AddCell()
-				cell.Value = lockedFunds.(string)
-				cell = row.AddCell()
-				cell.Value = initialPledge.(string)
-				cell = row.AddCell()
-				cell.Value = balance.(string)
-				file.Save("File.xlsx")
 
 			}
 
 		} else {
 			fmt.Println(err)
 		}
+		row = sheet.AddRow()
+
+		// table derived_gas_outputs
+		derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(to, i)
+
+		// table miner_sector_infos
+		minerSectorInfos, _ := s.PostgresClient.QueryMinerSectorInfos(minerId, i)
+		// table miner_pre_commit_infos
+		if derivedGasOutputs != nil && minerSectorInfos != nil {
+			var w = 0
+			if len(derivedGasOutputs) > len(minerSectorInfos) {
+				w = len(derivedGasOutputs)
+			} else {
+				w = len(minerSectorInfos)
+			}
+			var dg = len(derivedGasOutputs)
+			var ms = len(minerSectorInfos)
+			for j := 0; j <= w-1; j++ {
+				if j >= 0 && dg-1 >= j {
+					minerInfo.Value = derivedGasOutputs[j].Value
+					minerInfo.BaseFeeBurn = derivedGasOutputs[j].BaseFeeBurn
+					minerInfo.OverEstimationBurn = derivedGasOutputs[j].OverEstimationBurn
+					minerInfo.MinerPenalty = derivedGasOutputs[j].MinerPenalty
+					minerInfo.MinerTip = derivedGasOutputs[j].MinerTip
+					minerInfo.Refund = derivedGasOutputs[j].Refund
+					minerInfo.GasRefund = derivedGasOutputs[j].GasRefund
+					minerInfo.Cid = derivedGasOutputs[j].Cid
+					row = sheet.AddRow()
+					cell = row.AddCell()
+					cell.Value = minerInfo.Cid
+					cell = row.AddCell()
+					cell.Value = minerId
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(i, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.Value, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.BaseFeeBurn, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.OverEstimationBurn, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.Itoa(minerInfo.MinerPenalty)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.MinerTip, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.Refund, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.GasRefund, 10)
+					if ms-1 >= j {
+						minerInfo.InitialPledge = minerSectorInfos[j].InitialPledge
+						minerInfo.ExpectedStoragePledge = minerSectorInfos[j].ExpectedStoragePledge
+						minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfoAndSectorId(minerId, minerSectorInfos[j].SectorId)
+						minerInfo.PreCommitDeposit = minerPreCommitInfo.PreCommitDeposit
+						minerInfo.SectorId = minerSectorInfos[j].SectorId
+					} else {
+						minerInfo.InitialPledge = 0
+						minerInfo.ExpectedStoragePledge = 0
+						minerInfo.PreCommitDeposit = 0
+						minerInfo.SectorId = 0
+					}
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.InitialPledge, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.ExpectedStoragePledge, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.FormatInt(minerInfo.PreCommitDeposit, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.Itoa(minerInfo.SectorId)
+
+					cell = row.AddCell()
+					cell.Value = minerAvailableBalance.(string)
+					cell = row.AddCell()
+					cell.Value = preCommitDeposits.(string)
+					cell = row.AddCell()
+					cell.Value = lockedFunds.(string)
+					cell = row.AddCell()
+					cell.Value = initialPledge.(string)
+					cell = row.AddCell()
+					cell.Value = balance.(string)
+				}
+			}
+		} else {
+			minerInfo.MinerId = minerId
+			minerInfo.PreCommitDeposit = 0
+			minerInfo.Value = 0
+			minerInfo.BaseFeeBurn = 0
+			minerInfo.OverEstimationBurn = 0
+			minerInfo.MinerPenalty = 0
+			minerInfo.MinerTip = 0
+			minerInfo.Refund = 0
+			minerInfo.GasRefund = 0
+			minerInfo.InitialPledge = 0
+			minerInfo.ExpectedStoragePledge = 0
+			minerInfo.SectorId = 0
+
+			row = sheet.AddRow()
+			cell = row.AddCell()
+			cell.Value = "" // cid
+			cell = row.AddCell()
+			cell.Value = minerInfo.MinerId
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(i, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.Value, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.BaseFeeBurn, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.OverEstimationBurn, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.Itoa(minerInfo.MinerPenalty)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.MinerTip, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.Refund, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.GasRefund, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.InitialPledge, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.ExpectedStoragePledge, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(minerInfo.PreCommitDeposit, 10)
+			cell = row.AddCell()
+			cell.Value = strconv.Itoa(minerInfo.SectorId)
+			cell = row.AddCell()
+			cell.Value = minerAvailableBalance.(string)
+			cell = row.AddCell()
+			cell.Value = preCommitDeposits.(string)
+			cell = row.AddCell()
+			cell.Value = lockedFunds.(string)
+			cell = row.AddCell()
+			cell.Value = initialPledge.(string)
+			cell = row.AddCell()
+			cell.Value = balance.(string)
+
+		}
+
+		file.Save(minerId + "File.xlsx")
 	}
 
 	return minerInfo, "", 0
