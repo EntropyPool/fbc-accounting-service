@@ -13,6 +13,7 @@ type MinerInfos struct {
 	Refund                int64  `gorm:"column:refund"`
 	GasRefund             int64  `gorm:"column:gas_refund"`
 	GasBurned             int64  `gorm:"column:gas_burned"`
+	Method                int    `gorm:"column:method"`
 	InitialPledge         int64  `gorm:"column:initial_pledge"`
 	ExpectedStoragePledge int64  `gorm:"column:expected_storage_pledge"`
 	SectorId              int    `gorm:"column:sector_id"`

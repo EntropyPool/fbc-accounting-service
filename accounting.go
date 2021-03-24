@@ -103,13 +103,15 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	// 初始高度0 出块时间 1598306400 后面每一个加30s
 	startTime := string(query["startTime"][0])
 	startTimestamp, _ := strconv.ParseInt(startTime, 10, 32)
-	startHeightInt64 := atomic.AddInt64(&startTimestamp, -1598306400)
+	//startHeightInt64 := atomic.AddInt64(&startTimestamp, -1598306400)
+	// beijing time
+	startHeightInt64 := atomic.AddInt64(&startTimestamp, -1598277600)
 	realStartHeight := startHeightInt64 / 30
 	fmt.Printf("realStartHeight%s", realStartHeight)
 
 	endTime := string(query["endTime"][0])
 	endTimestamp, _ := strconv.ParseInt(endTime, 10, 32)
-	endHeightInt64 := atomic.AddInt64(&endTimestamp, -1598306400)
+	endHeightInt64 := atomic.AddInt64(&endTimestamp, -1598277600)
 	realEndHeight := endHeightInt64 / 30
 	fmt.Printf("realEndHeight%s", realEndHeight)
 
@@ -146,6 +148,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	cell = row.AddCell()
 	cell.Value = "GasRefund"
 	cell = row.AddCell()
+	cell.Value = "Method"
+	cell = row.AddCell()
 	cell.Value = "InitialPledge"
 	cell = row.AddCell()
 	cell.Value = "ExpectedStoragePledge"
@@ -162,7 +166,12 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	cell = row.AddCell()
 	cell.Value = "initialPledge"
 	cell = row.AddCell()
-	cell.Value = "balance at height"
+	cell.Value = "workerBalance"
+	cell = row.AddCell()
+	cell.Value = "minerBalance"
+
+	//cell = row.AddCell()
+	//cell.Value = "totalCostFee"
 
 	for i := realStartHeight; i < realEndHeight; i++ {
 
@@ -174,6 +183,7 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 		var lockedFunds interface{}
 		var initialPledge interface{}
 		var balance interface{}
+		var minerBalance interface{}
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
@@ -192,6 +202,11 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					fmt.Println(lockedFunds)
 					initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
 					fmt.Println(initialPledge)
+				}
+				var stateGetActorMinerMap map[string]interface{}
+				stateGetActorMinerResult := StateGetActor(minerId, cidStr)
+				if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
+					minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 				}
 				var stateMinerInfoMap map[string]interface{}
 				stateMinerInfoResult := StateMinerInfo(minerId, cidStr)
@@ -227,7 +242,9 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 			}
 			var dg = len(derivedGasOutputs)
 			var ms = len(minerSectorInfos)
+			//var totalCostFee interface{}
 			for j := 0; j <= w-1; j++ {
+
 				if j >= 0 && dg-1 >= j {
 					minerInfo.Value = derivedGasOutputs[j].Value
 					minerInfo.BaseFeeBurn = derivedGasOutputs[j].BaseFeeBurn
@@ -237,6 +254,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					minerInfo.Refund = derivedGasOutputs[j].Refund
 					minerInfo.GasRefund = derivedGasOutputs[j].GasRefund
 					minerInfo.Cid = derivedGasOutputs[j].Cid
+					minerInfo.Method = derivedGasOutputs[j].Method
+					//totalCostFee = minerInfo.BaseFeeBurn + minerInfo.OverEstimationBurn + minerInfo.MinerTip
 					row = sheet.AddRow()
 					cell = row.AddCell()
 					cell.Value = minerInfo.Cid
@@ -258,11 +277,17 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					cell.Value = strconv.FormatInt(minerInfo.Refund, 10)
 					cell = row.AddCell()
 					cell.Value = strconv.FormatInt(minerInfo.GasRefund, 10)
+					cell = row.AddCell()
+					cell.Value = strconv.Itoa(minerInfo.Method)
 					if ms-1 >= j {
 						minerInfo.InitialPledge = minerSectorInfos[j].InitialPledge
 						minerInfo.ExpectedStoragePledge = minerSectorInfos[j].ExpectedStoragePledge
 						minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfoAndSectorId(minerId, minerSectorInfos[j].SectorId)
-						minerInfo.PreCommitDeposit = minerPreCommitInfo.PreCommitDeposit
+						if minerPreCommitInfo != nil {
+							minerInfo.PreCommitDeposit = minerPreCommitInfo.PreCommitDeposit
+						} else {
+							minerInfo.PreCommitDeposit = 0
+						}
 						minerInfo.SectorId = minerSectorInfos[j].SectorId
 					} else {
 						minerInfo.InitialPledge = 0
@@ -289,6 +314,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					cell.Value = initialPledge.(string)
 					cell = row.AddCell()
 					cell.Value = balance.(string)
+					cell = row.AddCell()
+					cell.Value = minerBalance.(string)
 				}
 			}
 		} else {
@@ -301,6 +328,7 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 			minerInfo.MinerTip = 0
 			minerInfo.Refund = 0
 			minerInfo.GasRefund = 0
+			minerInfo.Method = 0
 			minerInfo.InitialPledge = 0
 			minerInfo.ExpectedStoragePledge = 0
 			minerInfo.SectorId = 0
@@ -327,6 +355,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 			cell = row.AddCell()
 			cell.Value = strconv.FormatInt(minerInfo.GasRefund, 10)
 			cell = row.AddCell()
+			cell.Value = strconv.Itoa(minerInfo.Method)
+			cell = row.AddCell()
 			cell.Value = strconv.FormatInt(minerInfo.InitialPledge, 10)
 			cell = row.AddCell()
 			cell.Value = strconv.FormatInt(minerInfo.ExpectedStoragePledge, 10)
@@ -344,6 +374,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 			cell.Value = initialPledge.(string)
 			cell = row.AddCell()
 			cell.Value = balance.(string)
+			cell = row.AddCell()
+			cell.Value = minerBalance.(string)
 
 		}
 
