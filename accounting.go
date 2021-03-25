@@ -10,6 +10,7 @@ import (
 	httpdaemon "github.com/NpoolRD/http-daemon"
 	"github.com/tealeg/xlsx"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"strconv"
 	_ "strings"
@@ -86,7 +87,6 @@ func (s *AccountingServer) GetMinerPledgeRequest(w http.ResponseWriter, req *htt
 
 	query := req.URL.Query()
 	minerId := string(query["minerId"][0])
-	fmt.Println(minerId)
 	minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfo(minerId)
 	return minerPreCommitInfo, "", 0
 }
@@ -170,8 +170,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	cell = row.AddCell()
 	cell.Value = "minerBalance"
 
-	//cell = row.AddCell()
-	//cell.Value = "totalCostFee"
+	cell = row.AddCell()
+	cell.Value = "totalCostFee"
 
 	for i := realStartHeight; i < realEndHeight; i++ {
 
@@ -191,17 +191,13 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 			var minerAvailableBalanceMap map[string]interface{}
 			if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
 				minerAvailableBalance = minerAvailableBalanceMap["result"]
-				fmt.Println(minerAvailableBalance)
 
 				stateReadStateResult := StateReadState(minerId, cidStr)
 				var stateReadStateMap map[string]interface{}
 				if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 					preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
-					fmt.Println(preCommitDeposits)
 					lockedFunds = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["LockedFunds"]
-					fmt.Println(lockedFunds)
 					initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
-					fmt.Println(initialPledge)
 				}
 				var stateGetActorMinerMap map[string]interface{}
 				stateGetActorMinerResult := StateGetActor(minerId, cidStr)
@@ -242,7 +238,7 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 			}
 			var dg = len(derivedGasOutputs)
 			var ms = len(minerSectorInfos)
-			//var totalCostFee interface{}
+			var totalCostFee string = "0"
 			for j := 0; j <= w-1; j++ {
 
 				if j >= 0 && dg-1 >= j {
@@ -255,7 +251,11 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					minerInfo.GasRefund = derivedGasOutputs[j].GasRefund
 					minerInfo.Cid = derivedGasOutputs[j].Cid
 					minerInfo.Method = derivedGasOutputs[j].Method
-					//totalCostFee = minerInfo.BaseFeeBurn + minerInfo.OverEstimationBurn + minerInfo.MinerTip
+					//totalCostFee = totalCostFee + uint64(minerInfo.BaseFeeBurn) + uint64(minerInfo.OverEstimationBurn) + uint64(minerInfo.MinerTip)
+					totalCostFee = BigIntAdd(totalCostFee, minerInfo.BaseFeeBurn)
+					totalCostFee = BigIntAdd(totalCostFee, minerInfo.OverEstimationBurn)
+					totalCostFee = BigIntAdd(totalCostFee, minerInfo.MinerTip)
+
 					row = sheet.AddRow()
 					cell = row.AddCell()
 					cell.Value = minerInfo.Cid
@@ -316,6 +316,14 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					cell.Value = balance.(string)
 					cell = row.AddCell()
 					cell.Value = minerBalance.(string)
+					if dg-1 == j {
+						cell = row.AddCell()
+						cell.Value = totalCostFee
+						fmt.Printf("totalCostFee: %s:\n", totalCostFee)
+					} else {
+						cell = row.AddCell()
+						cell.Value = strconv.FormatInt(0, 10)
+					}
 				}
 			}
 		} else {
@@ -376,6 +384,8 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 			cell.Value = balance.(string)
 			cell = row.AddCell()
 			cell.Value = minerBalance.(string)
+			cell = row.AddCell()
+			cell.Value = "0" // totalCostFee
 
 		}
 
@@ -440,4 +450,22 @@ func funcHttp(httpUrl string, reader *bytes.Reader) string {
 	//byte数组直接转成string
 	str := (*string)(unsafe.Pointer(&respBytes))
 	return *str
+}
+
+// over int64 calculate add
+func BigIntAdd(numstr string, num int64) string {
+	n, _ := new(big.Int).SetString(numstr, 10)
+	m := new(big.Int)
+	m.SetInt64(num)
+	m.Add(n, m)
+	return m.String()
+}
+
+// over int64 calculate sub
+func BigIntReduce(numstr string, num int64) string {
+	n, _ := new(big.Int).SetString(numstr, 10)
+	m := new(big.Int)
+	m.SetInt64(-num)
+	m.Add(n, m)
+	return m.String()
 }
