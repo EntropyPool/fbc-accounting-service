@@ -599,7 +599,6 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 // miner
 func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.MinerInfo {
 	var infos []types.MinerInfo
-	var workerBalance interface{}
 	var minerAvailableBalance interface{}
 	var preCommitDeposits interface{}
 	var lockedFunds interface{}
@@ -617,7 +616,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			var stateGetActorMinerMap map[string]interface{}
 			stateGetActorMinerResult := StateGetActor(account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
-				workerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
+				minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 				minerAvailableBalanceResult := StateMinerAvailableBalance(account, cidStr)
 				var minerAvailableBalanceMap map[string]interface{}
 				if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
@@ -630,16 +629,11 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 						lockedFunds = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["LockedFunds"]
 						initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
 					}
-					var stateGetActorMinerMap map[string]interface{}
-					stateGetActorMinerResult := StateGetActor(account, cidStr)
-					if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
-						minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
-					}
 				}
 			}
 			var info = types.MinerInfo{}
 			info.Id = account
-			info.Balance = workerBalance.(string)
+			info.Balance = minerBalance.(string)
 			info.BlockHeight = i
 			totalBurnFee := "0"
 			totalMinerTip := "0"
