@@ -4,18 +4,18 @@ package types
 type MinerInfos struct {
 	Cid                   string `gorm:"column:cid"`
 	MinerId               string `gorm:"column:miner_id"`
-	PreCommitDeposit      int64  `gorm:"column:pre_commit_deposit"`
-	Value                 int64  `gorm:"column:value"`
-	BaseFeeBurn           int64  `gorm:"column:base_fee_burn"`
-	OverEstimationBurn    int64  `gorm:"column:over_estimation_burn"`
+	PreCommitDeposit      string `gorm:"column:pre_commit_deposit"`
+	Value                 string `gorm:"column:value"`
+	BaseFeeBurn           string `gorm:"column:base_fee_burn"`
+	OverEstimationBurn    string `gorm:"column:over_estimation_burn"`
 	MinerPenalty          int    `gorm:"column:miner_penalty"`
-	MinerTip              int64  `gorm:"column:miner_tip"`
-	Refund                int64  `gorm:"column:refund"`
-	GasRefund             int64  `gorm:"column:gas_refund"`
-	GasBurned             int64  `gorm:"column:gas_burned"`
+	MinerTip              string `gorm:"column:miner_tip"`
+	Refund                string `gorm:"column:refund"`
+	GasRefund             string `gorm:"column:gas_refund"`
+	GasBurned             string `gorm:"column:gas_burned"`
 	Method                int    `gorm:"column:method"`
-	InitialPledge         int64  `gorm:"column:initial_pledge"`
-	ExpectedStoragePledge int64  `gorm:"column:expected_storage_pledge"`
+	InitialPledge         string `gorm:"column:initial_pledge"`
+	ExpectedStoragePledge string `gorm:"column:expected_storage_pledge"`
 	SectorId              int    `gorm:"column:sector_id"`
 
 	//Cid string `gorm:"column:cid"`
@@ -59,4 +59,38 @@ type MinerInfos struct {
 	//ReplaceSectorDeadline  int32 `gorm:"column:replace_sector_deadline"`
 	//ReplaceSectorPartition int32 `gorm:"column:replace_sector_partition"`
 	//ReplaceSectorNumber    int32 `gorm:"column:replace_sector_number"`
+}
+
+// normal account
+type AccountInfo struct {
+	Id          string `gorm:"column:Id"` // normalAddress workerId(workerAddress) minerId(minerAddress)
+	Balance     string `gorm:"column:Balance"`
+	BlockHeight int64  `gorm:"column:BlockHeight"`
+	Fee         string `gorm:"column:Fee"` // 费用
+	MinerTip    string `gorm:"column:MinerTip"`
+	SendIn      string `gorm:"column:Send"` // 转账（入)
+	SendOut     string `gorm:"column:Send"` // 转账（出)
+	Send        string `gorm:"column:Send"` // 转账
+}
+
+// worker account
+type WorkerInfo struct {
+	AccountInfo
+	PreCommitSectors   string `gorm:"column:preCommitSectors"`
+	ProveCommitSectors string `gorm:"column:proveCommitSectors"`
+}
+
+// miner account
+type MinerInfo struct {
+	AccountInfo
+	PunishFee                     string `gorm:"column:punishFee"` // 惩罚
+	PreCommitDeposits             string `gorm:"column:preCommitDeposits"`
+	PreCommitSectors              string `gorm:"column:preCommitSectors"`
+	ProveCommitSectors            string `gorm:"column:proveCommitSectors"`
+	BlockReward                   string `gorm:"column:blockReward"`
+	MinerAvailableBalance         string `gorm:"column:minerAvailableBalance"`
+	LockedFunds                   string `gorm:"column:lockedFunds"`
+	InitialPledge                 string `gorm:"column:initialPledge"`
+	BlockRewardToAvailableBalance string `gorm:"column:blockRewardToAvailableBalance"`
+	BlockRewardToLockedFunds      string `gorm:"column:blockRewardToLockedFunds"`
 }
