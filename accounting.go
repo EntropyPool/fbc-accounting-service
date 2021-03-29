@@ -443,7 +443,7 @@ func (s *AccountingServer) GetAccountInfoRequest(writer http.ResponseWriter, req
 			resultId := resulLookupIDMap["result"]
 			if strings.HasPrefix(resultId.(string), "f0") {
 				// TODO check
-				accountType = "worker"
+				accountType = "miner"
 			} else if strings.HasPrefix(resultId.(string), "f1") {
 				accountType = "normal"
 				// change to address because of database
@@ -479,11 +479,6 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 	var accountBalance interface{}
 	for i := realStartHeight; i < realEndHeight; i++ {
 		// 统计fee minertip totalvalue
-		// table derived_gas_outputs
-		derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
-		if len(derivedGasOutputs) <= 0 {
-			continue // cuntinue current blockNo
-		}
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
 		result := GetMinerInfoByMinerIdAndHeight(account, iStr)
@@ -504,16 +499,23 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 			totalSend := "0"
 			totalSendIn := "0"
 			totalSendOut := "0"
-			for j := 0; j < len(derivedGasOutputs); j++ {
-				totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[i].BaseFeeBurn)
-				totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[i].OverEstimationBurn)
-				totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[i].MinerTip)
-				if strings.EqualFold(derivedGasOutputs[i].From, account) { // sub
-					totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[i].Value)
-					totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[i].Value)
-				} else if strings.EqualFold(derivedGasOutputs[i].To, account) { // add
-					totalSend = BigIntAddStr(totalSend, derivedGasOutputs[i].Value)
-					totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[i].Value)
+			// table derived_gas_outputs
+			derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
+			if len(derivedGasOutputs) > 0 {
+				for j := 0; j < len(derivedGasOutputs); j++ {
+					// 出账才有手续费
+					if strings.EqualFold(derivedGasOutputs[j].From, account) {
+						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[i].BaseFeeBurn)
+						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[i].OverEstimationBurn)
+						totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[i].MinerTip)
+					}
+					if strings.EqualFold(derivedGasOutputs[i].From, account) && derivedGasOutputs[j].Method == 0 { // sub
+						totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[i].Value)
+						totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[i].Value)
+					} else if strings.EqualFold(derivedGasOutputs[i].To, account) && derivedGasOutputs[j].Method == 0 { // add
+						totalSend = BigIntAddStr(totalSend, derivedGasOutputs[i].Value)
+						totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[i].Value)
+					}
 				}
 			}
 			infos[i].Fee = totalBurnFee
@@ -533,11 +535,7 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 	var workerBalance interface{}
 	for i := realStartHeight; i < realEndHeight; i++ {
 		// 统计fee minertip totalvalue
-		// table derived_gas_outputs
-		derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
-		if len(derivedGasOutputs) <= 0 {
-			continue // cuntinue current blockNo
-		}
+
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
 		result := GetMinerInfoByMinerIdAndHeight(account, iStr)
@@ -560,22 +558,29 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 			totalSendOut := "0"
 			totalPreCommitSectors := "0"
 			totalProveCommitSectors := "0"
-			for j := 0; j < len(derivedGasOutputs); j++ {
-				totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
-				totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
-				totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
-				if strings.EqualFold(derivedGasOutputs[j].From, account) { // sub
-					totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
-					totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
-				} else if strings.EqualFold(derivedGasOutputs[j].To, account) { // add
-					totalSend = BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
-					totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
-				}
-				if derivedGasOutputs[j].Method == 6 {
-					totalPreCommitSectors = BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
-				}
-				if derivedGasOutputs[j].Method == 7 {
-					totalProveCommitSectors = BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+			// table derived_gas_outputs
+			derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
+			if len(derivedGasOutputs) > 0 {
+				for j := 0; j < len(derivedGasOutputs); j++ {
+					// 出账才有手续费
+					if strings.EqualFold(derivedGasOutputs[j].From, account) {
+						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
+						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
+						totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
+					}
+					if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
+						totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
+					} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
+						totalSend = BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 6 {
+						totalPreCommitSectors = BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 7 {
+						totalProveCommitSectors = BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+					}
 				}
 			}
 			info.Fee = totalBurnFee
@@ -603,10 +608,6 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	for i := realStartHeight; i < realEndHeight; i++ {
 		// 统计fee minertip totalvalue
 		// table derived_gas_outputs
-		derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
-		if len(derivedGasOutputs) <= 0 {
-			continue // cuntinue current blockNo
-		}
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
 		result := GetMinerInfoByMinerIdAndHeight(account, iStr)
@@ -647,24 +648,31 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			totalSendOut := "0"
 			totalPreCommitSectors := "0"
 			totalProveCommitSectors := "0"
-			for j := 0; j < len(derivedGasOutputs); j++ {
-				totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
-				totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
-				totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
-				if strings.EqualFold(derivedGasOutputs[j].From, account) { // sub
-					totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
-					totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
-				} else if strings.EqualFold(derivedGasOutputs[j].To, account) { // add
-					totalSend = BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
-					totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
-				}
-				if derivedGasOutputs[j].Method == 6 {
-					totalPreCommitSectors = BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
-				}
-				if derivedGasOutputs[j].Method == 7 {
-					totalProveCommitSectors = BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+			derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
+			if len(derivedGasOutputs) > 0 {
+				for j := 0; j < len(derivedGasOutputs); j++ {
+					// 出账才有手续费
+					if strings.EqualFold(derivedGasOutputs[j].From, account) {
+						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
+						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
+						totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
+					}
+					if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
+						totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
+					} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
+						totalSend = BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 6 {
+						totalPreCommitSectors = BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 7 {
+						totalProveCommitSectors = BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+					}
 				}
 			}
+
 			info.Fee = totalBurnFee
 			info.MinerTip = totalMinerTip
 			info.Send = totalSend // sub + add
@@ -681,6 +689,18 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			info.BlockRewardToLockedFunds = "0"
 			info.Balance = minerBalance.(string)
 			infos = append(infos, info)
+			var k = len(infos)
+			if k >= 2 {
+				subBalance := BigIntReduceStr(infos[k-1].Balance, infos[k-2].Balance)
+				totalPreCommitSectors := BigIntAddStr(infos[k-2].PreCommitSectors, infos[k-2].ProveCommitSectors)
+				infos[k-2].BlockReward = BigIntReduceStr(subBalance, totalPreCommitSectors)
+				blockReward, _ := strconv.ParseInt(infos[k-2].BlockReward, 10, 64)
+				if blockReward > 0 {
+					infos[k-2].BlockReward = BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
+				}
+				// TODO 惩罚
+			}
+
 		}
 	}
 	return infos
