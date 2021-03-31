@@ -531,6 +531,35 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 // worker
 func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.WorkerInfo {
 
+	var file *xlsx.File
+	var sheet *xlsx.Sheet
+	var row *xlsx.Row
+	var cell *xlsx.Cell
+	file = xlsx.NewFile()
+	sheet, _ = file.AddSheet("Sheet1")
+	row = sheet.AddRow()
+	// add title
+	cell = row.AddCell()
+	cell.Value = "Id"
+	cell = row.AddCell()
+	cell.Value = "Balance"
+	cell = row.AddCell()
+	cell.Value = "BlockHeight"
+	cell = row.AddCell()
+	cell.Value = "Fee"
+	cell = row.AddCell()
+	cell.Value = "MinerTip"
+	cell = row.AddCell()
+	cell.Value = "SendIn"
+	cell = row.AddCell()
+	cell.Value = "SendOut"
+	cell = row.AddCell()
+	cell.Value = "Send"
+	cell = row.AddCell()
+	cell.Value = "PreCommitSectors"
+	cell = row.AddCell()
+	cell.Value = "ProveCommitSectors"
+
 	var infos []types.WorkerInfo
 	var workerBalance interface{}
 	for i := realStartHeight; i < realEndHeight; i++ {
@@ -591,6 +620,30 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 			info.PreCommitSectors = totalPreCommitSectors
 			info.ProveCommitSectors = totalProveCommitSectors
 			infos = append(infos, info)
+
+			row = sheet.AddRow()
+			// add title
+			cell = row.AddCell()
+			cell.Value = info.Id
+			cell = row.AddCell()
+			cell.Value = info.Balance
+			cell = row.AddCell()
+			cell.Value = strconv.FormatInt(info.BlockHeight, 10)
+			cell = row.AddCell()
+			cell.Value = info.Fee
+			cell = row.AddCell()
+			cell.Value = info.MinerTip
+			cell = row.AddCell()
+			cell.Value = info.SendIn
+			cell = row.AddCell()
+			cell.Value = info.SendOut
+			cell = row.AddCell()
+			cell.Value = info.Send
+			cell = row.AddCell()
+			cell.Value = info.PreCommitSectors
+			cell = row.AddCell()
+			cell.Value = info.ProveCommitSectors
+			file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "worker.xlsx")
 		}
 	}
 	return infos
@@ -598,13 +651,61 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 
 // miner
 func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.MinerInfo {
+
+	var file *xlsx.File
+	var sheet *xlsx.Sheet
+	var row *xlsx.Row
+	var cell *xlsx.Cell
+	file = xlsx.NewFile()
+	sheet, _ = file.AddSheet("Sheet1")
+	row = sheet.AddRow()
+	// add title
+	cell = row.AddCell()
+	cell.Value = "Id"
+	cell = row.AddCell()
+	cell.Value = "Balance"
+	cell = row.AddCell()
+	cell.Value = "BlockHeight"
+	cell = row.AddCell()
+	cell.Value = "Fee"
+	cell = row.AddCell()
+	cell.Value = "MinerTip"
+	cell = row.AddCell()
+	cell.Value = "SendIn"
+	cell = row.AddCell()
+	cell.Value = "SendOut"
+	cell = row.AddCell()
+	cell.Value = "Send"
+	cell = row.AddCell()
+	cell.Value = "PreCommitSectors"
+	cell = row.AddCell()
+	cell.Value = "ProveCommitSectors"
+	cell = row.AddCell()
+	cell.Value = "PunishFee"
+	cell = row.AddCell()
+	cell.Value = "PreCommitDeposits"
+	cell = row.AddCell()
+	cell.Value = "BlockReward"
+	cell = row.AddCell()
+	cell.Value = "TAG"
+	cell = row.AddCell()
+	cell.Value = "MinerAvailableBalance"
+	cell = row.AddCell()
+	cell.Value = "LockedFunds"
+	cell = row.AddCell()
+	cell.Value = "InitialPledge"
+	cell = row.AddCell()
+	cell.Value = "BlockRewardToAvailableBalance"
+	cell = row.AddCell()
+	cell.Value = "BlockRewardToLockedFunds"
+
 	var infos []types.MinerInfo
 	var minerAvailableBalance interface{}
 	var preCommitDeposits interface{}
 	var lockedFunds interface{}
 	var initialPledge interface{}
 	var minerBalance interface{}
-	for i := realStartHeight; i < realEndHeight; i++ {
+	for i := realStartHeight; i <= realEndHeight; i++ {
 		// 统计fee minertip totalvalue
 		// table derived_gas_outputs
 		iStr := strconv.FormatInt(i, 10)
@@ -691,9 +792,117 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				blockReward, _ := strconv.ParseInt(infos[k-2].BlockReward, 10, 64)
 				if blockReward > 0 {
 					infos[k-2].BlockReward = BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
+					k3totalPreCommitSectors := BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+					var p = BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
+					// TODO block is null
+					if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
+						infos[k-2].BlockReward = "0"
+						infos[k-2].TAG = "block is null"
+					}
+				} else if blockReward < 0 {
+					// maybe this block is null or other bug
+					infos[k-2].BlockReward = "0"
 				}
 				// TODO 惩罚
+				addBalance := BigIntAddStr(totalPreCommitSectors, infos[k-2].BlockReward)
+				addBalance = BigIntAddStr(addBalance, infos[k-2].Send)
+				if !strings.EqualFold(addBalance, subBalance) {
+					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
+						infos[k-2].TAG = "惩罚(销毁)"
+						infos[k-2].PunishFee = BigIntReduceStr(addBalance, subBalance)
+						fmt.Printf("account--" + account + "----burn height-----:" + strconv.FormatInt(i, 10) + "\n")
+					} else {
+						infos[k-3].PunishFee = "0"
+						infos[k-3].TAG = ""
+						// TODO excel update infos[k-3]
+					}
+				}
+
+				row = sheet.AddRow()
+				// add title
+				cell = row.AddCell()
+				cell.Value = infos[k-2].Id
+				cell = row.AddCell()
+				cell.Value = infos[k-2].Balance
+				cell = row.AddCell()
+				cell.Value = strconv.FormatInt(infos[k-2].BlockHeight, 10)
+				cell = row.AddCell()
+				cell.Value = infos[k-2].Fee
+				cell = row.AddCell()
+				cell.Value = infos[k-2].MinerTip
+				cell = row.AddCell()
+				cell.Value = infos[k-2].SendIn
+				cell = row.AddCell()
+				cell.Value = infos[k-2].SendOut
+				cell = row.AddCell()
+				cell.Value = infos[k-2].Send
+				cell = row.AddCell()
+				cell.Value = infos[k-2].PreCommitSectors
+				cell = row.AddCell()
+				cell.Value = infos[k-2].ProveCommitSectors
+				cell = row.AddCell()
+				cell.Value = infos[k-2].PunishFee
+				cell = row.AddCell()
+				cell.Value = infos[k-2].PreCommitDeposits
+				cell = row.AddCell()
+				cell.Value = infos[k-2].BlockReward
+				cell = row.AddCell()
+				cell.Value = infos[k-2].TAG
+				cell = row.AddCell()
+				cell.Value = infos[k-2].MinerAvailableBalance
+				cell = row.AddCell()
+				cell.Value = infos[k-2].LockedFunds
+				cell = row.AddCell()
+				cell.Value = infos[k-2].InitialPledge
+				cell = row.AddCell()
+				cell.Value = infos[k-2].BlockRewardToAvailableBalance
+				cell = row.AddCell()
+				cell.Value = infos[k-2].BlockRewardToLockedFunds
 			}
+			if int64(k)-1 == (realEndHeight - realStartHeight) {
+				row = sheet.AddRow()
+				// add title
+				cell = row.AddCell()
+				cell.Value = infos[k-1].Id
+				cell = row.AddCell()
+				cell.Value = infos[k-1].Balance
+				cell = row.AddCell()
+				cell.Value = strconv.FormatInt(infos[k-1].BlockHeight, 10)
+				cell = row.AddCell()
+				cell.Value = infos[k-1].Fee
+				cell = row.AddCell()
+				cell.Value = infos[k-1].MinerTip
+				cell = row.AddCell()
+				cell.Value = infos[k-1].SendIn
+				cell = row.AddCell()
+				cell.Value = infos[k-1].SendOut
+				cell = row.AddCell()
+				cell.Value = infos[k-1].Send
+				cell = row.AddCell()
+				cell.Value = infos[k-1].PreCommitSectors
+				cell = row.AddCell()
+				cell.Value = infos[k-1].ProveCommitSectors
+				cell = row.AddCell()
+				cell.Value = infos[k-1].PunishFee
+				cell = row.AddCell()
+				cell.Value = infos[k-1].PreCommitDeposits
+				cell = row.AddCell()
+				cell.Value = infos[k-1].BlockReward
+				cell = row.AddCell()
+				cell.Value = "" // tag
+				cell = row.AddCell()
+				cell.Value = infos[k-1].MinerAvailableBalance
+				cell = row.AddCell()
+				cell.Value = infos[k-1].LockedFunds
+				cell = row.AddCell()
+				cell.Value = infos[k-1].InitialPledge
+				cell = row.AddCell()
+				cell.Value = infos[k-1].BlockRewardToAvailableBalance
+				cell = row.AddCell()
+				cell.Value = infos[k-1].BlockRewardToLockedFunds
+			}
+
+			file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "miner.xlsx")
 
 		}
 	}
