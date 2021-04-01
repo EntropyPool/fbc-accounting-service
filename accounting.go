@@ -1,23 +1,22 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	log "github.com/EntropyPool/entropy-logger"
 	fbcpostgres "github.com/EntropyPool/fbc-accounting-service/postgres"
+	filrpc "github.com/EntropyPool/fbc-accounting-service/rpc"
 	types "github.com/EntropyPool/fbc-accounting-service/types"
+	utils "github.com/EntropyPool/fbc-accounting-service/utils"
 	httpdaemon "github.com/NpoolRD/http-daemon"
 	"github.com/tealeg/xlsx"
 	"io/ioutil"
-	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
 	_ "strings"
 	"sync/atomic"
 	_ "time"
-	"unsafe"
 )
 
 type AccountingConfig struct {
@@ -104,13 +103,13 @@ func (s *AccountingServer) GetMinerPledgeRequest(w http.ResponseWriter, req *htt
 	query := req.URL.Query()
 	account := string(query["account"][0])
 	//minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfo(minerId)
-	result := ChainHead()
+	result := filrpc.ChainHead()
 	var initialPledge interface{}
 	var resultMap map[string]interface{}
 	if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 		cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 		cidStr := cid.(string)
-		stateReadStateResult := StateReadState(account, cidStr)
+		stateReadStateResult := filrpc.StateReadState(account, cidStr)
 		var stateReadStateMap map[string]interface{}
 		if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 			initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
@@ -158,20 +157,20 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		// table derived_gas_outputs
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
-				minerAvailableBalanceResult := StateMinerAvailableBalance(account, cidStr)
+				minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(account, cidStr)
 				var minerAvailableBalanceMap map[string]interface{}
 				if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
 					minerAvailableBalance = minerAvailableBalanceMap["result"]
 
-					stateReadStateResult := StateReadState(account, cidStr)
+					stateReadStateResult := filrpc.StateReadState(account, cidStr)
 					var stateReadStateMap map[string]interface{}
 					if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 						preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
@@ -195,22 +194,22 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 				for j := 0; j < len(derivedGasOutputs); j++ {
 					// 出账才有手续费
 					if strings.EqualFold(derivedGasOutputs[j].From, account) {
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
-						totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
+						totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
 					}
 					if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
-						totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
-						totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
+						totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
 					} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
-						totalSend = BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
-						totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
+						totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
 					}
 					if derivedGasOutputs[j].Method == 6 {
-						totalPreCommitSectors = BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
+						totalPreCommitSectors = utils.BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
 					}
 					if derivedGasOutputs[j].Method == 7 {
-						totalProveCommitSectors = BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+						totalProveCommitSectors = utils.BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
 					}
 				}
 			}
@@ -235,25 +234,25 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 			totalPreCommitSectorss := "0"
 			if k >= 2 {
 				// 两个高度的余额差
-				subBalance := BigIntReduceStr(infos[k-1].Balance, infos[k-2].Balance)
+				subBalance := utils.BigIntReduceStr(infos[k-1].Balance, infos[k-2].Balance)
 				// 上一个高度的pre + pro
-				totalPreCommitSectorss = BigIntAddStr(infos[k-2].PreCommitSectors, infos[k-2].ProveCommitSectors)
+				totalPreCommitSectorss = utils.BigIntAddStr(infos[k-2].PreCommitSectors, infos[k-2].ProveCommitSectors)
 				// 区块奖励预判 = 两个高度的余额差 - （上一个高度的pre + pro）
-				infos[k-2].BlockReward = BigIntReduceStr(subBalance, totalPreCommitSectorss)
+				infos[k-2].BlockReward = utils.BigIntReduceStr(subBalance, totalPreCommitSectorss)
 				blockReward, _ := strconv.ParseInt(infos[k-2].BlockReward, 10, 64)
 				if blockReward > 0 {
 					// 区块奖励实际 = 区块奖励预判 - 上一个高度的收支send
-					infos[k-2].BlockReward = BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
+					infos[k-2].BlockReward = utils.BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
 					// 特殊情况 : 下一个高度是空块 作差也会大于0 因为空块余额不变化，而且没将上一个高度的pre 和pro 加进来
-					k3totalPreCommitSectors := BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
-					var p = BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
+					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
 					// TODO block is null
 					if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
 						infos[k-2].BlockReward = "0"
 						infos[k-2].TAG = "block is null"
 					}
 					// 累计每天的奖励
-					TodayBlockRewards = BigIntAddStr(TodayBlockRewards, infos[k-2].BlockReward)
+					TodayBlockRewards = utils.BigIntAddStr(TodayBlockRewards, infos[k-2].BlockReward)
 
 				} else if blockReward < 0 {
 					// maybe this block is null or other unknown bug
@@ -261,32 +260,32 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 				}
 
 				// 求某个高度 线性释放的金额  = （下一高度的可用余额-上一个高度可用余额）-(上一个高度的(pre + pro + InitialPledge + PreCommitDeposits + send) - 下一个高度的（PreCommitDeposits+InitialPledge）)
-				add1 := BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
-				add2 := BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
-				add2 = BigIntAddStr(add2, infos[k-2].Send)
-				subA := BigIntAddStr(totalPreCommitSectorss, add2)
-				subA = BigIntReduceStr(subA, add1)
+				add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
+				add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
+				add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
+				subA := utils.BigIntAddStr(totalPreCommitSectorss, add2)
+				subA = utils.BigIntReduceStr(subA, add1)
 				// 两个高度的可用余额差
-				subAvli := BigIntReduceStr(infos[k-1].MinerAvailableBalance, infos[k-2].MinerAvailableBalance)
+				subAvli := utils.BigIntReduceStr(infos[k-1].MinerAvailableBalance, infos[k-2].MinerAvailableBalance)
 				// 线性释放的金额
-				subBlockRewardAvalible := BigIntReduceStr(subAvli, subA)
-				Total25PercentRewards = BigIntAddStr(subBlockRewardAvalible, Total25PercentRewards)
+				subBlockRewardAvalible := utils.BigIntReduceStr(subAvli, subA)
+				Total25PercentRewards = utils.BigIntAddStr(subBlockRewardAvalible, Total25PercentRewards)
 				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--Total25PercentRewards:" + Total25PercentRewards + "\n")
 
 				// TODO 惩罚
 				// 惩罚 = 上一个高度的 （pre+ pro + blockreward + 收支send）- 两个高度的余额差
-				addBalance := BigIntAddStr(totalPreCommitSectorss, infos[k-2].BlockReward)
-				addBalance = BigIntAddStr(addBalance, infos[k-2].Send)
+				addBalance := utils.BigIntAddStr(totalPreCommitSectorss, infos[k-2].BlockReward)
+				addBalance = utils.BigIntAddStr(addBalance, infos[k-2].Send)
 				if !strings.EqualFold(addBalance, subBalance) {
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
-						infos[k-2].PunishFee = BigIntReduceStr(addBalance, subBalance)
+						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
 						fmt.Printf("totalPunishFees0-------:" + totalPunishFees)
-						totalPunishFees = BigIntAddStr(totalPunishFees, infos[k-2].PunishFee)
+						totalPunishFees = utils.BigIntAddStr(totalPunishFees, infos[k-2].PunishFee)
 						fmt.Printf("account--" + account + "----burn height-----:" + "totalPunishFees1:" + totalPunishFees + "----blockNo:" + strconv.FormatInt(i, 10) + "\n")
 					} else {
 						// 将空块 误认为是惩罚的 减掉
-						totalPunishFees = BigIntReduceStr(totalPunishFees, infos[k-3].PunishFee)
+						totalPunishFees = utils.BigIntReduceStr(totalPunishFees, infos[k-3].PunishFee)
 						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "k3:" + infos[k-3].PunishFee + "---totalPunishFees2:" + totalPunishFees + "\n")
 						infos[k-3].PunishFee = "0"
 						infos[k-3].TAG = ""
@@ -300,8 +299,8 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	DailyRewardInfos.TodayBlockRewards = TodayBlockRewards
 	DailyRewardInfos.PunishFee = totalPunishFees
 	DailyRewardInfos.Total25PercentRewards = Total25PercentRewards
-	percentReward := BigIntMulStr(TodayBlockRewards, "25")
-	Today25PercentRewards = BigIntDivStr(percentReward, "100")
+	percentReward := utils.BigIntMulStr(TodayBlockRewards, "25")
+	Today25PercentRewards = utils.BigIntDivStr(percentReward, "100")
 	// 25% pencent rewards one day
 	DailyRewardInfos.Today25PercentRewards = Today25PercentRewards
 	return DailyRewardInfos, "", 0
@@ -392,7 +391,7 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	for i := realStartHeight; i < realEndHeight; i++ {
 
 		iStr := strconv.FormatInt(i, 10)
-		result := GetMinerInfoByMinerIdAndHeight(minerId, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(minerId, iStr)
 		var resultMap map[string]interface{}
 		var minerAvailableBalance interface{}
 		var preCommitDeposits interface{}
@@ -403,12 +402,12 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
-			minerAvailableBalanceResult := StateMinerAvailableBalance(minerId, cidStr)
+			minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(minerId, cidStr)
 			var minerAvailableBalanceMap map[string]interface{}
 			if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
 				minerAvailableBalance = minerAvailableBalanceMap["result"]
 
-				stateReadStateResult := StateReadState(minerId, cidStr)
+				stateReadStateResult := filrpc.StateReadState(minerId, cidStr)
 				var stateReadStateMap map[string]interface{}
 				if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 					preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
@@ -416,17 +415,17 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
 				}
 				var stateGetActorMinerMap map[string]interface{}
-				stateGetActorMinerResult := StateGetActor(minerId, cidStr)
+				stateGetActorMinerResult := filrpc.StateGetActor(minerId, cidStr)
 				if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 					minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 				}
 				var stateMinerInfoMap map[string]interface{}
-				stateMinerInfoResult := StateMinerInfo(minerId, cidStr)
+				stateMinerInfoResult := filrpc.StateMinerInfo(minerId, cidStr)
 				if err := json.Unmarshal([]byte(stateMinerInfoResult), &stateMinerInfoMap); err == nil {
 					workerId := stateMinerInfoMap["result"].(map[string]interface{})["Worker"]
 					workerIdStr := workerId.(string)
 					var stateGetActorMap map[string]interface{}
-					stateGetActorResult := StateGetActor(workerIdStr, cidStr)
+					stateGetActorResult := filrpc.StateGetActor(workerIdStr, cidStr)
 					if err := json.Unmarshal([]byte(stateGetActorResult), &stateGetActorMap); err == nil {
 						balance = stateGetActorMap["result"].(map[string]interface{})["Balance"]
 					}
@@ -468,9 +467,9 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					minerInfo.Cid = derivedGasOutputs[j].Cid
 					minerInfo.Method = derivedGasOutputs[j].Method
 					//totalCostFee = totalCostFee + uint64(minerInfo.BaseFeeBurn) + uint64(minerInfo.OverEstimationBurn) + uint64(minerInfo.MinerTip)
-					totalCostFee = BigIntAddStr(totalCostFee, minerInfo.BaseFeeBurn)
-					totalCostFee = BigIntAddStr(totalCostFee, minerInfo.OverEstimationBurn)
-					totalCostFee = BigIntAddStr(totalCostFee, minerInfo.MinerTip)
+					totalCostFee = utils.BigIntAddStr(totalCostFee, minerInfo.BaseFeeBurn)
+					totalCostFee = utils.BigIntAddStr(totalCostFee, minerInfo.OverEstimationBurn)
+					totalCostFee = utils.BigIntAddStr(totalCostFee, minerInfo.MinerTip)
 
 					row = sheet.AddRow()
 					cell = row.AddCell()
@@ -639,12 +638,12 @@ func (s *AccountingServer) GetAccountInfoRequest(writer http.ResponseWriter, req
 		accountType = "worker" // worker address
 	} else if strings.HasPrefix(account, "f0") { // if begin f0 maybe miner id  or f1 f2 f3' address id
 		// check account
-		result := ChainHead()
+		result := filrpc.ChainHead()
 		var resultMap map[string]interface{}
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
-			resultLookupID := StateLookupID(account, cidStr)
+			resultLookupID := filrpc.StateLookupID(account, cidStr)
 			var resulLookupIDMap map[string]interface{}
 			json.Unmarshal([]byte(resultLookupID), &resulLookupIDMap)
 			resultId := resulLookupIDMap["result"]
@@ -688,12 +687,12 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 		// 统计fee minertip totalvalue
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				accountBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 			}
@@ -712,16 +711,16 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 				for j := 0; j < len(derivedGasOutputs); j++ {
 					// 出账才有手续费
 					if strings.EqualFold(derivedGasOutputs[j].From, account) {
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[i].BaseFeeBurn)
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[i].OverEstimationBurn)
-						totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[i].MinerTip)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[i].BaseFeeBurn)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[i].OverEstimationBurn)
+						totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[i].MinerTip)
 					}
 					if strings.EqualFold(derivedGasOutputs[i].From, account) && derivedGasOutputs[j].Method == 0 { // sub
-						totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[i].Value)
-						totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[i].Value)
+						totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[i].Value)
+						totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[i].Value)
 					} else if strings.EqualFold(derivedGasOutputs[i].To, account) && derivedGasOutputs[j].Method == 0 { // add
-						totalSend = BigIntAddStr(totalSend, derivedGasOutputs[i].Value)
-						totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[i].Value)
+						totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[i].Value)
+						totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[i].Value)
 					}
 				}
 			}
@@ -774,12 +773,12 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				workerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 			}
@@ -800,22 +799,22 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 				for j := 0; j < len(derivedGasOutputs); j++ {
 					// 出账才有手续费
 					if strings.EqualFold(derivedGasOutputs[j].From, account) {
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
-						totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
+						totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
 					}
 					if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
-						totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
-						totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
+						totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
 					} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
-						totalSend = BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
-						totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
+						totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
 					}
 					if derivedGasOutputs[j].Method == 6 {
-						totalPreCommitSectors = BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
+						totalPreCommitSectors = utils.BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
 					}
 					if derivedGasOutputs[j].Method == 7 {
-						totalProveCommitSectors = BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+						totalProveCommitSectors = utils.BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
 					}
 				}
 			}
@@ -917,20 +916,20 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 		// table derived_gas_outputs
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
-				minerAvailableBalanceResult := StateMinerAvailableBalance(account, cidStr)
+				minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(account, cidStr)
 				var minerAvailableBalanceMap map[string]interface{}
 				if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
 					minerAvailableBalance = minerAvailableBalanceMap["result"]
 
-					stateReadStateResult := StateReadState(account, cidStr)
+					stateReadStateResult := filrpc.StateReadState(account, cidStr)
 					var stateReadStateMap map[string]interface{}
 					if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 						preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
@@ -955,22 +954,22 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				for j := 0; j < len(derivedGasOutputs); j++ {
 					// 出账才有手续费
 					if strings.EqualFold(derivedGasOutputs[j].From, account) {
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
-						totalBurnFee = BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
-						totalMinerTip = BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
+						totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
 					}
 					if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
-						totalSend = BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
-						totalSendOut = BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
+						totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
 					} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
-						totalSend = BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
-						totalSendIn = BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
+						totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
 					}
 					if derivedGasOutputs[j].Method == 6 {
-						totalPreCommitSectors = BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
+						totalPreCommitSectors = utils.BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
 					}
 					if derivedGasOutputs[j].Method == 7 {
-						totalProveCommitSectors = BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+						totalProveCommitSectors = utils.BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
 					}
 				}
 			}
@@ -993,14 +992,14 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			infos = append(infos, info)
 			var k = len(infos)
 			if k >= 2 {
-				subBalance := BigIntReduceStr(infos[k-1].Balance, infos[k-2].Balance)
-				totalPreCommitSectors := BigIntAddStr(infos[k-2].PreCommitSectors, infos[k-2].ProveCommitSectors)
-				infos[k-2].BlockReward = BigIntReduceStr(subBalance, totalPreCommitSectors)
+				subBalance := utils.BigIntReduceStr(infos[k-1].Balance, infos[k-2].Balance)
+				totalPreCommitSectors := utils.BigIntAddStr(infos[k-2].PreCommitSectors, infos[k-2].ProveCommitSectors)
+				infos[k-2].BlockReward = utils.BigIntReduceStr(subBalance, totalPreCommitSectors)
 				blockReward, _ := strconv.ParseInt(infos[k-2].BlockReward, 10, 64)
 				if blockReward > 0 {
-					infos[k-2].BlockReward = BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
-					k3totalPreCommitSectors := BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
-					var p = BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
+					infos[k-2].BlockReward = utils.BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
+					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
 					// TODO block is null
 					if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
 						infos[k-2].BlockReward = "0"
@@ -1011,12 +1010,12 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					infos[k-2].BlockReward = "0"
 				}
 				// TODO 惩罚
-				addBalance := BigIntAddStr(totalPreCommitSectors, infos[k-2].BlockReward)
-				addBalance = BigIntAddStr(addBalance, infos[k-2].Send)
+				addBalance := utils.BigIntAddStr(totalPreCommitSectors, infos[k-2].BlockReward)
+				addBalance = utils.BigIntAddStr(addBalance, infos[k-2].Send)
 				if !strings.EqualFold(addBalance, subBalance) {
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
-						infos[k-2].PunishFee = BigIntReduceStr(addBalance, subBalance)
+						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
 						fmt.Printf("account--" + account + "----burn height-----:" + strconv.FormatInt(i, 10) + "\n")
 					} else {
 						infos[k-3].PunishFee = "0"
@@ -1115,134 +1114,4 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	}
 	return infos
 
-}
-
-var httpUrl = "http://106.74.7.3:34569"
-
-//  find filecoin chain tipset
-func GetMinerInfoByMinerIdAndHeight(minerId string, height string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.ChainGetTipSetByHeight", "params": [` + height + `,[]], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-//  StateMinerAvailableBalance
-func StateMinerAvailableBalance(minerId string, cid string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerAvailableBalance", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-//  StateReadState
-func StateReadState(minerId string, cid string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateReadState", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-// StateMinerInfo return worker
-func StateMinerInfo(minerId string, cid string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerInfo", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-// StateGetActor  minerId or workerId  or normal id  to find balance at current blockNo
-func StateGetActor(minerId string, cid string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateGetActor", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-// StateLookupID  根据高度反查ID
-func StateLookupID(account string, cid string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateLookupID", "params": [` + "\"" + account + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-// ChainHead  获取最新高度
-func ChainHead() string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.ChainHead", "params": [], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-// ChainHead  miner power
-func StateMinerPower(account string, cid string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerPower", "params": [` + "\"" + account + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
-	reader := bytes.NewReader([]byte(json))
-	return funcHttp(httpUrl, reader)
-}
-
-func funcHttp(httpUrl string, reader *bytes.Reader) string {
-	request, err := http.NewRequest("POST", httpUrl, reader)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	request.Header.Set("Content-Type", "application/json;charset=UTF-8")
-	client := http.Client{}
-	resp, err := client.Do(request)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	respBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	//byte数组直接转成string
-	str := (*string)(unsafe.Pointer(&respBytes))
-	return *str
-}
-
-// over int64 calculate add
-func BigIntAdd(numstr string, num int64) string {
-	n, _ := new(big.Int).SetString(numstr, 10)
-	m := new(big.Int)
-	m.SetInt64(num)
-	m.Add(n, m)
-	return m.String()
-}
-
-// over int64 calculate sub
-func BigIntReduce(numstr string, num int64) string {
-	n, _ := new(big.Int).SetString(numstr, 10)
-	m := new(big.Int)
-	m.SetInt64(-num)
-	m.Add(n, m)
-	return m.String()
-}
-
-func BigIntAddStr(numstr string, num string) string {
-	n, _ := new(big.Int).SetString(numstr, 10)
-	m := new(big.Int)
-	m.SetString(num, 10)
-	m.Add(n, m)
-	return m.String()
-}
-
-// over int64 calculate sub
-func BigIntReduceStr(numstr string, num string) string {
-	n, _ := new(big.Int).SetString(numstr, 10)
-	m := new(big.Int)
-	m.SetString(num, 10)
-	m.Sub(n, m)
-	return m.String()
-}
-
-func BigIntMulStr(numstr string, num string) string {
-	n, _ := new(big.Int).SetString(numstr, 10)
-	m := new(big.Int)
-	m.SetString(num, 10)
-	m.Mul(n, m)
-	return m.String()
-}
-
-// over int64 calculate div
-func BigIntDivStr(numstr string, num string) string {
-	n, _ := new(big.Int).SetString(numstr, 10)
-	m := new(big.Int)
-	m.SetString(num, 10)
-	m.Div(n, m)
-	return m.String()
 }
