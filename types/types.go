@@ -95,3 +95,11 @@ type MinerInfo struct {
 	BlockRewardToAvailableBalance string `gorm:"column:blockRewardToAvailableBalance"`
 	BlockRewardToLockedFunds      string `gorm:"column:blockRewardToLockedFunds"`
 }
+
+type DailyMinerInfoAvailable struct {
+	TodayBlockRewards     string `gorm:"column:TodayBlockRewards"`     // 当天的奖励
+	Today25PercentRewards string `gorm:"column:Today25PercentRewards"` // 当天的释放
+	Total25PercentRewards string `gorm:"column:Total25PercentRewards"` // 累计当天释放
+	PunishFee             string `gorm:"column:PunishFee"`             // 惩罚
+	MinerPower            string `gorm:"column:MinerPower"`            // 矿工算力
+}
