@@ -104,7 +104,9 @@ func (s *AccountingServer) GetMinerPledgeRequest(w http.ResponseWriter, req *htt
 	account := string(query["account"][0])
 	//minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfo(minerId)
 	result := filrpc.ChainHead()
+	var totalInitialPledge interface{}
 	var initialPledge interface{}
+	var preCommitDeposits interface{}
 	var resultMap map[string]interface{}
 	if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 		cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
@@ -113,11 +115,14 @@ func (s *AccountingServer) GetMinerPledgeRequest(w http.ResponseWriter, req *htt
 		var stateReadStateMap map[string]interface{}
 		if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 			initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
+			preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
 		} else {
 			return err, "error", 1
 		}
 	}
-	return initialPledge, "success", 0
+	totalInitialPledge = utils.BigIntAddStr(initialPledge.(string), preCommitDeposits.(string))
+
+	return totalInitialPledge, "success", 0
 }
 
 //  to find miner dailyReward
