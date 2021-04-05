@@ -113,6 +113,15 @@ type DerivedGasOutputs struct {
 	ActorName          string `gorm:"column:actor_name"`
 }
 
+// table miner_sector_infos
+type MinerSectorEvents struct {
+	MinerId   string `gorm:"column:miner_id"`
+	SectorId  int    `gorm:"column:sector_id"`
+	StateRoot string `gorm:"column:state_root"`
+	Event     string `gorm:"column:event"`
+	Height    int32  `gorm:"column:height"`
+}
+
 func (cli *PostgresCli) InsertMinerPreCommitInfo(info MinerPreCommitInfos) error {
 	couldBeUpdated := false
 
@@ -178,6 +187,29 @@ func (cli *PostgresCli) QueryMinerPreCommitInfoAndSectorId(minerId string, secto
 	var info MinerPreCommitInfos
 	var count int
 	cli.db.Where("miner_id = ? and sector_id= ?", minerId, sectorId).Find(&info).Count(&count)
+	if count == 0 {
+		return nil, xerrors.Errorf("cannot find any value")
+	}
+
+	return &info, nil
+}
+
+func (cli *PostgresCli) QueryMinerPreCommitInfoAndBlockNo(minerId string, blockNo int64) ([]MinerPreCommitInfos, error) {
+	var info []MinerPreCommitInfos
+	var count int
+	cli.db.Where("miner_id = ? and height= ?", minerId, blockNo).Find(&info).Count(&count)
+	if count == 0 {
+		return nil, xerrors.Errorf("cannot find any value")
+	}
+
+	return info, nil
+}
+
+func (cli *PostgresCli) QueryMinerSectorEventsAndEvent(minerId string, sectorId int, event string) (*MinerSectorEvents, error) {
+
+	var info MinerSectorEvents
+	var count int
+	cli.db.Where("miner_id = ? and sector_id= ? and \"event\"=?", minerId, sectorId, event).Find(&info).Count(&count)
 	if count == 0 {
 		return nil, xerrors.Errorf("cannot find any value")
 	}

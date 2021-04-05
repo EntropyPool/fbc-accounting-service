@@ -1,4 +1,4 @@
-package main
+package accounting
 
 import (
 	"encoding/json"
