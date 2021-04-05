@@ -85,3 +85,17 @@ func funcHttp(httpUrl string, reader *bytes.Reader) string {
 	str := (*string)(unsafe.Pointer(&respBytes))
 	return *str
 }
+
+//  StateMinerSectorCount 查看矿工在当前高度的Faulty是否掉算力
+func StateMinerSectorCount(minerId string, cid string) string {
+	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerSectorCount", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
+	reader := bytes.NewReader([]byte(json))
+	return funcHttp(httpUrl, reader)
+}
+
+//  StateSectorPreCommitInfo 查看矿工的某个扇区在当前高度的preCommitDeposit
+func StateSectorPreCommitInfo(minerId string, sectorId string, cid string) string {
+	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateSectorPreCommitInfo", "params": [` + "\"" + minerId + "\"," + sectorId + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
+	reader := bytes.NewReader([]byte(json))
+	return funcHttp(httpUrl, reader)
+}

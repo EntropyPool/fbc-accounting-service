@@ -1,6 +1,8 @@
 package utils
 
-import "math/big"
+import (
+	"math/big"
+)
 
 // over int64 calculate add
 func BigIntAdd(numstr string, num int64) string {

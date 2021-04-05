@@ -146,7 +146,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	var infos []types.MinerInfo
 	TodayBlockRewards := "0"
 	Today25PercentRewards := "0"
-	Total25PercentRewards := "0"
+	TotalTodayRewards := "0"
 
 	//var MinerPower string
 
@@ -156,6 +156,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	var lockedFunds interface{}
 	var initialPledge interface{}
 	var minerBalance interface{}
+	SubLockFunds := "0"
 
 	for i := realStartHeight; i <= realEndHeight; i++ {
 		// 统计fee minertip totalvalue
@@ -265,29 +266,35 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 				}
 
 				// 求某个高度 线性释放的金额  = （下一高度的可用余额-上一个高度可用余额）-(上一个高度的(pre + pro + InitialPledge + PreCommitDeposits + send) - 下一个高度的（PreCommitDeposits+InitialPledge）)
+
 				add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
+				add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
 				add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
 				add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
-				subA := utils.BigIntAddStr(totalPreCommitSectorss, add2)
-				subA = utils.BigIntReduceStr(subA, add1)
-				// 两个高度的可用余额差
-				subAvli := utils.BigIntReduceStr(infos[k-1].MinerAvailableBalance, infos[k-2].MinerAvailableBalance)
-				// 线性释放的金额
-				subBlockRewardAvalible := utils.BigIntReduceStr(subAvli, subA)
-				Total25PercentRewards = utils.BigIntAddStr(subBlockRewardAvalible, Total25PercentRewards)
-				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--Total25PercentRewards:" + Total25PercentRewards + "\n")
+				add2 = utils.BigIntAddStr(totalPreCommitSectorss, add2)
+				add2 = utils.BigIntAddStr(infos[k-2].MinerAvailableBalance, add2)
+				subBlockRewardAvalible := utils.BigIntReduceStr(add1, add2)
+				TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+
+				subLockFunds := utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
+				if strings.Contains(subLockFunds, "-") {
+					SubLockFunds = utils.BigIntReduceStr(SubLockFunds, subLockFunds)
+				} else {
+					SubLockFunds = utils.BigIntAddStr(subLockFunds, SubLockFunds)
+				}
+				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--TotalTodayRewards:" + TotalTodayRewards + "\n")
 
 				// TODO 惩罚
 				// 惩罚 = 上一个高度的 （pre+ pro + blockreward + 收支send）- 两个高度的余额差
 				addBalance := utils.BigIntAddStr(totalPreCommitSectorss, infos[k-2].BlockReward)
 				addBalance = utils.BigIntAddStr(addBalance, infos[k-2].Send)
+
 				if !strings.EqualFold(addBalance, subBalance) {
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
 						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
-						fmt.Printf("totalPunishFees0-------:" + totalPunishFees)
 						totalPunishFees = utils.BigIntAddStr(totalPunishFees, infos[k-2].PunishFee)
-						fmt.Printf("account--" + account + "----burn height-----:" + "totalPunishFees1:" + totalPunishFees + "----blockNo:" + strconv.FormatInt(i, 10) + "\n")
+						fmt.Printf("account--" + account + "---PunishFee-------:" + infos[k-2].PunishFee + "----burn height-----:" + "totalPunishFees1:" + totalPunishFees + "----blockNo:" + strconv.FormatInt(i, 10) + "\n")
 					} else {
 						// 将空块 误认为是惩罚的 减掉
 						totalPunishFees = utils.BigIntReduceStr(totalPunishFees, infos[k-3].PunishFee)
@@ -295,22 +302,34 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 						infos[k-3].PunishFee = "0"
 						infos[k-3].TAG = ""
 					}
+					// 或者 subBalance=addBalance 且 lockFunds 不相等
+				} else if strings.EqualFold(addBalance, subBalance) && !strings.EqualFold(subLockFunds, "0") {
+					fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---PunishFees may be lost miner power :" + subLockFunds + "\n")
 				}
 
 			}
 
 		}
 	}
+	// SubLockFunds 含有 PunishFee
+	fmt.Println(SubLockFunds, "\n")
+	Total := utils.BigIntAddStr(TotalTodayRewards, SubLockFunds)
+	fmt.Println(SubLockFunds)
+	// 除了正常出块，剩下的为线性释放
+	Today180PercentRewards := utils.BigIntReduceStr(Total, TodayBlockRewards)
+
 	DailyRewardInfos.TodayBlockRewards = TodayBlockRewards
 	DailyRewardInfos.PunishFee = totalPunishFees
-	DailyRewardInfos.Total25PercentRewards = Total25PercentRewards
+	DailyRewardInfos.TotalTodayRewards = TotalTodayRewards
 	percentReward := utils.BigIntMulStr(TodayBlockRewards, "25")
 	Today25PercentRewards = utils.BigIntDivStr(percentReward, "100")
 	// 25% pencent rewards one day
 	DailyRewardInfos.Today25PercentRewards = Today25PercentRewards
+	DailyRewardInfos.Today180PercentRewards = Today180PercentRewards
 	return DailyRewardInfos, "", 0
 }
 
+// get MinerInfo detail
 func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.Request) (interface{}, string, int) {
 	minerInfo := types.MinerInfos{}
 
@@ -404,9 +423,10 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 		var initialPledge interface{}
 		var balance interface{}
 		var minerBalance interface{}
+		cidStr := ""
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
-			cidStr := cid.(string)
+			cidStr = cid.(string)
 			minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(minerId, cidStr)
 			var minerAvailableBalanceMap map[string]interface{}
 			if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
@@ -503,11 +523,18 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					if ms-1 >= j {
 						minerInfo.InitialPledge = minerSectorInfos[j].InitialPledge
 						minerInfo.ExpectedStoragePledge = minerSectorInfos[j].ExpectedStoragePledge
+						// 存在数据库同步异常 没有记录的情况
 						minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfoAndSectorId(minerId, minerSectorInfos[j].SectorId)
 						if minerPreCommitInfo != nil {
 							minerInfo.PreCommitDeposit = minerPreCommitInfo.PreCommitDeposit
 						} else {
-							minerInfo.PreCommitDeposit = "0"
+							stateSectorPreCommitInfoResult := filrpc.StateSectorPreCommitInfo(minerId, strconv.Itoa(minerSectorInfos[j].SectorId), cidStr)
+							var stateSectorPreCommitInfoMap map[string]interface{}
+							if err := json.Unmarshal([]byte(stateSectorPreCommitInfoResult), &stateSectorPreCommitInfoMap); err == nil {
+								minerInfo.PreCommitDeposit = stateSectorPreCommitInfoMap["result"].(map[string]interface{})["PreCommitDeposit"].(string)
+							} else {
+								minerInfo.PreCommitDeposit = "-1"
+							}
 						}
 						minerInfo.SectorId = minerSectorInfos[j].SectorId
 					} else {
@@ -909,6 +936,10 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	cell.Value = "BlockRewardToAvailableBalance"
 	cell = row.AddCell()
 	cell.Value = "BlockRewardToLockedFunds"
+	cell = row.AddCell()
+	cell.Value = "Total25PercentRewards"
+	cell = row.AddCell()
+	cell.Value = "subLockFunds"
 
 	var infos []types.MinerInfo
 	var minerAvailableBalance interface{}
@@ -916,6 +947,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	var lockedFunds interface{}
 	var initialPledge interface{}
 	var minerBalance interface{}
+	SubLockFunds := "0"
 	for i := realStartHeight; i <= realEndHeight; i++ {
 		// 统计fee minertip totalvalue
 		// table derived_gas_outputs
@@ -954,6 +986,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			totalSendOut := "0"
 			totalPreCommitSectors := "0"
 			totalProveCommitSectors := "0"
+			TotalTodayRewards := "0"
 			derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
 			if len(derivedGasOutputs) > 0 {
 				for j := 0; j < len(derivedGasOutputs); j++ {
@@ -1014,6 +1047,25 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					// maybe this block is null or other bug
 					infos[k-2].BlockReward = "0"
 				}
+
+				add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
+				add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
+				add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
+				add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
+				add2 = utils.BigIntAddStr(totalPreCommitSectors, add2)
+				add2 = utils.BigIntAddStr(infos[k-2].MinerAvailableBalance, add2)
+				// 线性释放的金额
+				subBlockRewardAvalible := utils.BigIntReduceStr(add1, add2)
+				TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+				// LockFunds 相减
+				subLockFunds := utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
+				if strings.Contains(subLockFunds, "-") {
+					SubLockFunds = utils.BigIntReduceStr(subLockFunds, SubLockFunds)
+				} else {
+					SubLockFunds = utils.BigIntAddStr(subLockFunds, SubLockFunds)
+				}
+
+				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--Total25PercentRewards:" + TotalTodayRewards + "SubLockFunds:" + SubLockFunds + "\n")
 				// TODO 惩罚
 				addBalance := utils.BigIntAddStr(totalPreCommitSectors, infos[k-2].BlockReward)
 				addBalance = utils.BigIntAddStr(addBalance, infos[k-2].Send)
@@ -1025,8 +1077,13 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					} else {
 						infos[k-3].PunishFee = "0"
 						infos[k-3].TAG = ""
-						// TODO excel update infos[k-3]
+						// TODO excel update infos[k-3].TAG
 					}
+					// 或者 subBalance=addBalance 且 lockFunds 不相等
+				} else if strings.EqualFold(addBalance, subBalance) && !strings.EqualFold(subLockFunds, "0") {
+					fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---PunishFees may be lost miner power :" + subLockFunds + "\n")
+					infos[k-2].TAG = "掉算力惩罚(销毁)"
+					infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
 				}
 
 				row = sheet.AddRow()
@@ -1069,6 +1126,10 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				cell.Value = infos[k-2].BlockRewardToAvailableBalance
 				cell = row.AddCell()
 				cell.Value = infos[k-2].BlockRewardToLockedFunds
+				cell = row.AddCell()
+				cell.Value = subBlockRewardAvalible
+				cell = row.AddCell()
+				cell.Value = subLockFunds
 			}
 			if int64(k)-1 == (realEndHeight - realStartHeight) {
 				row = sheet.AddRow()

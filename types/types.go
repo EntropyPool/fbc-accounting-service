@@ -83,7 +83,7 @@ type WorkerInfo struct {
 // miner account
 type MinerInfo struct {
 	AccountInfo
-	PunishFee                     string `gorm:"column:punishFee"`   // 惩罚
+	PunishFee                     string `gorm:"column:punishFee"` // 惩罚
 	PreCommitDeposits             string `gorm:"column:preCommitDeposits"`
 	PreCommitSectors              string `gorm:"column:preCommitSectors"`
 	ProveCommitSectors            string `gorm:"column:proveCommitSectors"`
@@ -97,9 +97,10 @@ type MinerInfo struct {
 }
 
 type DailyMinerInfoAvailable struct {
-	TodayBlockRewards     string `gorm:"column:TodayBlockRewards"`     // 当天的奖励
-	Today25PercentRewards string `gorm:"column:Today25PercentRewards"` // 当天的释放
-	Total25PercentRewards string `gorm:"column:Total25PercentRewards"` // 累计当天释放
-	PunishFee             string `gorm:"column:PunishFee"`             // 惩罚
-	MinerPower            string `gorm:"column:MinerPower"`            // 矿工算力
+	TodayBlockRewards      string `gorm:"column:TodayBlockRewards"`     // 当天的奖励
+	Today25PercentRewards  string `gorm:"column:Today25PercentRewards"` // 当天奖励25%的释放
+	Today180PercentRewards string `gorm:"column:Today25PercentRewards"` // 当天累计1/180释放
+	TotalTodayRewards      string `gorm:"column:Total25PercentRewards"` // 累计当天总释放
+	PunishFee              string `gorm:"column:PunishFee"`             // 惩罚
+	MinerPower             string `gorm:"column:MinerPower"`            // 矿工算力
 }
