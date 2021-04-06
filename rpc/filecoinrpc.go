@@ -60,8 +60,13 @@ func ChainHead() string {
 }
 
 // ChainHead  miner power
-func StateMinerPower(account string, cid string) string {
-	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerPower", "params": [` + "\"" + account + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
+func StateMinerPower(account string, cid string, flag bool) string {
+	json := ""
+	if flag {
+		json = `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerPower", "params": [` + "\"" + account + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
+	} else {
+		json = `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerPower", "params": [` + "\"" + account + "\"" + `,[]], "id": 1 }`
+	}
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }

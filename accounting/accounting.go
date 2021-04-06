@@ -147,6 +147,12 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	TodayBlockRewards := "0"
 	Today25PercentRewards := "0"
 	TotalTodayRewards := "0"
+	var MinerPower interface{}
+	stateMinerPowerResult := filrpc.StateMinerPower(account, "", false)
+	var stateMinerPowerMap map[string]interface{}
+	if err := json.Unmarshal([]byte(stateMinerPowerResult), &stateMinerPowerMap); err == nil {
+		MinerPower = stateMinerPowerMap["result"].(map[string]interface{})["MinerPower"].(map[string]interface{})["RawBytePower"]
+	}
 
 	//var MinerPower string
 
@@ -326,6 +332,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	// 25% pencent rewards one day
 	DailyRewardInfos.Today25PercentRewards = Today25PercentRewards
 	DailyRewardInfos.Today180PercentRewards = Today180PercentRewards
+	DailyRewardInfos.MinerPower = MinerPower.(string)
 	return DailyRewardInfos, "", 0
 }
 
