@@ -1233,7 +1233,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 		}
 	}
 	//file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "miner.xlsx")
-	f, err := os.Create("./webdel.csv")
+	f, err := os.Create("./" + account + "filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + ".csv")
 	if err != nil {
 		panic(err)
 	}
