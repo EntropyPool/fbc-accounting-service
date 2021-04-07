@@ -176,8 +176,8 @@ func (cli *PostgresCli) QueryCalculaDerivedGasOutputs(to string, blockNo int64) 
 		"cast((sum(cast(miner_tip as DECIMAL))) as VARCHAR) as total_miner_tip,"+
 		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_prove_commit_sectors from derived_gas_outputs where \"to\" = ? and height = ? and method =7),"+
 		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_pre_commit_sectors from derived_gas_outputs where \"to\" = ? and height = ? and method =6),"+
-		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_send_in from derived_gas_outputs where \"to\" = ? and height = ? and method =0 ),"+
-		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_send_out from derived_gas_outputs where \"from\" = ? and height = ? and method =0 ) "+
+		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_send_in from derived_gas_outputs where \"to\" = ? and height = ? and (method =0 or method=16)),"+
+		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_send_out from derived_gas_outputs where \"from\" = ? and height = ? and (method =0 or method=16)) "+
 		"from derived_gas_outputs where  \"to\" = ? and height =? ", to, blockNo, to, blockNo, to, blockNo, to, blockNo, to, blockNo).Scan(&info)
 
 	//cli.db.Raw("select value as valuem from derived_gas_outputs where \"to\" =? and height =?  limit 1", "f0134006", 624646).Scan(&info)
