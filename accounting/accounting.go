@@ -801,34 +801,35 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 // worker
 func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.WorkerInfo {
 
-	var file *xlsx.File
-	var sheet *xlsx.Sheet
-	var row *xlsx.Row
-	var cell *xlsx.Cell
-	file = xlsx.NewFile()
-	sheet, _ = file.AddSheet("Sheet1")
-	row = sheet.AddRow()
-	// add title
-	cell = row.AddCell()
-	cell.Value = "Id"
-	cell = row.AddCell()
-	cell.Value = "Balance"
-	cell = row.AddCell()
-	cell.Value = "BlockHeight"
-	cell = row.AddCell()
-	cell.Value = "Fee"
-	cell = row.AddCell()
-	cell.Value = "MinerTip"
-	cell = row.AddCell()
-	cell.Value = "SendIn"
-	cell = row.AddCell()
-	cell.Value = "SendOut"
-	cell = row.AddCell()
-	cell.Value = "Send"
-	cell = row.AddCell()
-	cell.Value = "PreCommitSectors"
-	cell = row.AddCell()
-	cell.Value = "ProveCommitSectors"
+	t := time.Now()
+	//var file *xlsx.File
+	//var sheet *xlsx.Sheet
+	//var row *xlsx.Row
+	//var cell *xlsx.Cell
+	//file = xlsx.NewFile()
+	//sheet, _ = file.AddSheet("Sheet1")
+	//row = sheet.AddRow()
+	//// add title
+	//cell = row.AddCell()
+	//cell.Value = "Id"
+	//cell = row.AddCell()
+	//cell.Value = "Balance"
+	//cell = row.AddCell()
+	//cell.Value = "BlockHeight"
+	//cell = row.AddCell()
+	//cell.Value = "Fee"
+	//cell = row.AddCell()
+	//cell.Value = "MinerTip"
+	//cell = row.AddCell()
+	//cell.Value = "SendIn"
+	//cell = row.AddCell()
+	//cell.Value = "SendOut"
+	//cell = row.AddCell()
+	//cell.Value = "Send"
+	//cell = row.AddCell()
+	//cell.Value = "PreCommitSectors"
+	//cell = row.AddCell()
+	//cell.Value = "ProveCommitSectors"
 
 	var infos []types.WorkerInfo
 	var workerBalance interface{}
@@ -891,31 +892,48 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 			info.ProveCommitSectors = totalProveCommitSectors
 			infos = append(infos, info)
 
-			row = sheet.AddRow()
-			// add title
-			cell = row.AddCell()
-			cell.Value = info.Id
-			cell = row.AddCell()
-			cell.Value = info.Balance
-			cell = row.AddCell()
-			cell.Value = strconv.FormatInt(info.BlockHeight, 10)
-			cell = row.AddCell()
-			cell.Value = info.Fee
-			cell = row.AddCell()
-			cell.Value = info.MinerTip
-			cell = row.AddCell()
-			cell.Value = info.SendIn
-			cell = row.AddCell()
-			cell.Value = info.SendOut
-			cell = row.AddCell()
-			cell.Value = info.Send
-			cell = row.AddCell()
-			cell.Value = info.PreCommitSectors
-			cell = row.AddCell()
-			cell.Value = info.ProveCommitSectors
-			file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "worker.xlsx")
+			//row = sheet.AddRow()
+			//// add title
+			//cell = row.AddCell()
+			//cell.Value = info.Id
+			//cell = row.AddCell()
+			//cell.Value = info.Balance
+			//cell = row.AddCell()
+			//cell.Value = strconv.FormatInt(info.BlockHeight, 10)
+			//cell = row.AddCell()
+			//cell.Value = info.Fee
+			//cell = row.AddCell()
+			//cell.Value = info.MinerTip
+			//cell = row.AddCell()
+			//cell.Value = info.SendIn
+			//cell = row.AddCell()
+			//cell.Value = info.SendOut
+			//cell = row.AddCell()
+			//cell.Value = info.Send
+			//cell = row.AddCell()
+			//cell.Value = info.PreCommitSectors
+			//cell = row.AddCell()
+			//cell.Value = info.ProveCommitSectors
+			//file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "worker.xlsx")
 		}
 	}
+	f, err := os.Create("./" + account + "filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + ".csv")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	f.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	w := csv.NewWriter(f)
+	w.Write([]string{"Id", "Balance", "BlockHeight", "Fee", "MinerTip", "SendIn", "SendOut", "Send", "PreCommitSectors",
+		"ProveCommitSectors"})
+	for i := 0; i < len(infos); i++ {
+		w.Write([]string{infos[i].Id + "\t", infos[i].Balance + "\t", strconv.FormatInt(infos[i].BlockHeight, 10) + "\t", infos[i].Fee + "\t",
+			infos[i].MinerTip + "\t", infos[i].SendIn + "\t", infos[i].SendOut + "\t",
+			infos[i].Send + "\t", infos[i].PreCommitSectors + "\t", infos[i].ProveCommitSectors + "\t"})
+	}
+	w.Flush()
+	spendtime := time.Since(t)
+	fmt.Println("spend time:", spendtime)
 	return infos
 }
 
