@@ -1,6 +1,7 @@
 package accounting
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	log "github.com/EntropyPool/entropy-logger"
@@ -12,10 +13,12 @@ import (
 	"github.com/tealeg/xlsx"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	_ "strings"
 	"sync/atomic"
+	"time"
 	_ "time"
 )
 
@@ -341,9 +344,8 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		}
 	}
 	// SubLockFunds 含有 PunishFee
-	fmt.Println(SubLockFunds, "\n")
+	fmt.Println("SubLockFunds:", SubLockFunds, "\n")
 	Total := utils.BigIntAddStr(TotalTodayRewards, SubLockFunds)
-	fmt.Println(SubLockFunds)
 	// 除了正常出块，剩下的为线性释放
 	Today180PercentRewards := utils.BigIntReduceStr(Total, TodayBlockRewards)
 
@@ -920,56 +922,58 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 // miner
 func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.MinerInfo {
 
-	var file *xlsx.File
-	var sheet *xlsx.Sheet
-	var row *xlsx.Row
-	var cell *xlsx.Cell
-	file = xlsx.NewFile()
-	sheet, _ = file.AddSheet("Sheet1")
-	row = sheet.AddRow()
-	// add title
-	cell = row.AddCell()
-	cell.Value = "Id"
-	cell = row.AddCell()
-	cell.Value = "Balance"
-	cell = row.AddCell()
-	cell.Value = "BlockHeight"
-	cell = row.AddCell()
-	cell.Value = "Fee"
-	cell = row.AddCell()
-	cell.Value = "MinerTip"
-	cell = row.AddCell()
-	cell.Value = "SendIn"
-	cell = row.AddCell()
-	cell.Value = "SendOut"
-	cell = row.AddCell()
-	cell.Value = "Send"
-	cell = row.AddCell()
-	cell.Value = "PreCommitSectors"
-	cell = row.AddCell()
-	cell.Value = "ProveCommitSectors"
-	cell = row.AddCell()
-	cell.Value = "PunishFee"
-	cell = row.AddCell()
-	cell.Value = "PreCommitDeposits"
-	cell = row.AddCell()
-	cell.Value = "BlockReward"
-	cell = row.AddCell()
-	cell.Value = "TAG"
-	cell = row.AddCell()
-	cell.Value = "MinerAvailableBalance"
-	cell = row.AddCell()
-	cell.Value = "LockedFunds"
-	cell = row.AddCell()
-	cell.Value = "InitialPledge"
-	cell = row.AddCell()
-	cell.Value = "BlockRewardToAvailableBalance"
-	cell = row.AddCell()
-	cell.Value = "BlockRewardToLockedFunds"
-	cell = row.AddCell()
-	cell.Value = "Total25PercentRewards"
-	cell = row.AddCell()
-	cell.Value = "subLockFunds"
+	t := time.Now()
+
+	//var file *xlsx.File
+	//var sheet *xlsx.Sheet
+	//var row *xlsx.Row
+	//var cell *xlsx.Cell
+	//file = xlsx.NewFile()
+	//sheet, _ = file.AddSheet("Sheet1")
+	//row = sheet.AddRow()
+	//// add title
+	//cell = row.AddCell()
+	//cell.Value = "Id"
+	//cell = row.AddCell()
+	//cell.Value = "Balance"
+	//cell = row.AddCell()
+	//cell.Value = "BlockHeight"
+	//cell = row.AddCell()
+	//cell.Value = "Fee"
+	//cell = row.AddCell()
+	//cell.Value = "MinerTip"
+	//cell = row.AddCell()
+	//cell.Value = "SendIn"
+	//cell = row.AddCell()
+	//cell.Value = "SendOut"
+	//cell = row.AddCell()
+	//cell.Value = "Send"
+	//cell = row.AddCell()
+	//cell.Value = "PreCommitSectors"
+	//cell = row.AddCell()
+	//cell.Value = "ProveCommitSectors"
+	//cell = row.AddCell()
+	//cell.Value = "PunishFee"
+	//cell = row.AddCell()
+	//cell.Value = "PreCommitDeposits"
+	//cell = row.AddCell()
+	//cell.Value = "BlockReward"
+	//cell = row.AddCell()
+	//cell.Value = "TAG"
+	//cell = row.AddCell()
+	//cell.Value = "MinerAvailableBalance"
+	//cell = row.AddCell()
+	//cell.Value = "LockedFunds"
+	//cell = row.AddCell()
+	//cell.Value = "InitialPledge"
+	//cell = row.AddCell()
+	//cell.Value = "BlockRewardToAvailableBalance"
+	//cell = row.AddCell()
+	//cell.Value = "BlockRewardToLockedFunds"
+	//cell = row.AddCell()
+	//cell.Value = "Total25PercentRewards"
+	//cell = row.AddCell()
+	//cell.Value = "subLockFunds"
 
 	var infos []types.MinerInfo
 	var minerAvailableBalance interface{}
@@ -1072,6 +1076,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			info.ProveCommitSectors = totalProveCommitSectors
 
 			info.BlockReward = "0"
+			info.PunishFee = "0"
 			info.MinerAvailableBalance = minerAvailableBalance.(string)
 			info.LockedFunds = lockedFunds.(string)
 			info.InitialPledge = initialPledge.(string)
@@ -1137,98 +1142,117 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					infos[k-2].PunishFee = subLockFunds
 				}
 
-				row = sheet.AddRow()
-				// add title
-				cell = row.AddCell()
-				cell.Value = infos[k-2].Id
-				cell = row.AddCell()
-				cell.Value = infos[k-2].Balance
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(infos[k-2].BlockHeight, 10)
-				cell = row.AddCell()
-				cell.Value = infos[k-2].Fee
-				cell = row.AddCell()
-				cell.Value = infos[k-2].MinerTip
-				cell = row.AddCell()
-				cell.Value = infos[k-2].SendIn
-				cell = row.AddCell()
-				cell.Value = infos[k-2].SendOut
-				cell = row.AddCell()
-				cell.Value = infos[k-2].Send
-				cell = row.AddCell()
-				cell.Value = infos[k-2].PreCommitSectors
-				cell = row.AddCell()
-				cell.Value = infos[k-2].ProveCommitSectors
-				cell = row.AddCell()
-				cell.Value = infos[k-2].PunishFee
-				cell = row.AddCell()
-				cell.Value = infos[k-2].PreCommitDeposits
-				cell = row.AddCell()
-				cell.Value = infos[k-2].BlockReward
-				cell = row.AddCell()
-				cell.Value = infos[k-2].TAG
-				cell = row.AddCell()
-				cell.Value = infos[k-2].MinerAvailableBalance
-				cell = row.AddCell()
-				cell.Value = infos[k-2].LockedFunds
-				cell = row.AddCell()
-				cell.Value = infos[k-2].InitialPledge
-				cell = row.AddCell()
-				cell.Value = infos[k-2].BlockRewardToAvailableBalance
-				cell = row.AddCell()
-				cell.Value = infos[k-2].BlockRewardToLockedFunds
-				cell = row.AddCell()
-				cell.Value = subBlockRewardAvalible
-				cell = row.AddCell()
-				cell.Value = subLockFunds
+				//row = sheet.AddRow()
+				//// add title
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].Id
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].Balance
+				//cell = row.AddCell()
+				//cell.Value = strconv.FormatInt(infos[k-2].BlockHeight, 10)
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].Fee
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].MinerTip
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].SendIn
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].SendOut
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].Send
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].PreCommitSectors
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].ProveCommitSectors
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].PunishFee
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].PreCommitDeposits
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].BlockReward
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].TAG
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].MinerAvailableBalance
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].LockedFunds
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].InitialPledge
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].BlockRewardToAvailableBalance
+				//cell = row.AddCell()
+				//cell.Value = infos[k-2].BlockRewardToLockedFunds
+				//cell = row.AddCell()
+				//cell.Value = subBlockRewardAvalible
+				//cell = row.AddCell()
+				//cell.Value = subLockFunds
 			}
-			if int64(k)-1 == (realEndHeight - realStartHeight) {
-				row = sheet.AddRow()
-				// add title
-				cell = row.AddCell()
-				cell.Value = infos[k-1].Id
-				cell = row.AddCell()
-				cell.Value = infos[k-1].Balance
-				cell = row.AddCell()
-				cell.Value = strconv.FormatInt(infos[k-1].BlockHeight, 10)
-				cell = row.AddCell()
-				cell.Value = infos[k-1].Fee
-				cell = row.AddCell()
-				cell.Value = infos[k-1].MinerTip
-				cell = row.AddCell()
-				cell.Value = infos[k-1].SendIn
-				cell = row.AddCell()
-				cell.Value = infos[k-1].SendOut
-				cell = row.AddCell()
-				cell.Value = infos[k-1].Send
-				cell = row.AddCell()
-				cell.Value = infos[k-1].PreCommitSectors
-				cell = row.AddCell()
-				cell.Value = infos[k-1].ProveCommitSectors
-				cell = row.AddCell()
-				cell.Value = infos[k-1].PunishFee
-				cell = row.AddCell()
-				cell.Value = infos[k-1].PreCommitDeposits
-				cell = row.AddCell()
-				cell.Value = infos[k-1].BlockReward
-				cell = row.AddCell()
-				cell.Value = "" // tag
-				cell = row.AddCell()
-				cell.Value = infos[k-1].MinerAvailableBalance
-				cell = row.AddCell()
-				cell.Value = infos[k-1].LockedFunds
-				cell = row.AddCell()
-				cell.Value = infos[k-1].InitialPledge
-				cell = row.AddCell()
-				cell.Value = infos[k-1].BlockRewardToAvailableBalance
-				cell = row.AddCell()
-				cell.Value = infos[k-1].BlockRewardToLockedFunds
-			}
-
-			file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "miner.xlsx")
-
+			//if int64(k)-1 == (realEndHeight - realStartHeight) {
+			//	row = sheet.AddRow()
+			//	// add title
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].Id
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].Balance
+			//	cell = row.AddCell()
+			//	cell.Value = strconv.FormatInt(infos[k-1].BlockHeight, 10)
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].Fee
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].MinerTip
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].SendIn
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].SendOut
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].Send
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].PreCommitSectors
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].ProveCommitSectors
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].PunishFee
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].PreCommitDeposits
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].BlockReward
+			//	cell = row.AddCell()
+			//	cell.Value = "" // tag
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].MinerAvailableBalance
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].LockedFunds
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].InitialPledge
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].BlockRewardToAvailableBalance
+			//	cell = row.AddCell()
+			//	cell.Value = infos[k-1].BlockRewardToLockedFunds
+			//}
 		}
 	}
+	//file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "miner.xlsx")
+	f, err := os.Create("./webdel.csv")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	f.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	//f.WriteString()
+	w := csv.NewWriter(f)
+	w.Write([]string{"Id", "Balance", "BlockHeight", "Fee", "MinerTip", "SendIn", "SendOut", "Send", "PreCommitSectors",
+		"ProveCommitSectors", "PunishFee", "PreCommitDeposits", "BlockReward", "TAG", "MinerAvailableBalance", "LockedFunds",
+		"InitialPledge", "BlockRewardToAvailableBalance", "BlockRewardToLockedFunds", "Total25PercentRewards", "subLockFunds"})
+	for i := 0; i < len(infos); i++ {
+		w.Write([]string{infos[i].Id + "\t", infos[i].Balance + "\t", strconv.FormatInt(infos[i].BlockHeight, 10) + "\t", infos[i].Fee + "\t",
+			infos[i].MinerTip + "\t", infos[i].SendIn + "\t", infos[i].SendOut + "\t",
+			infos[i].Send + "\t", infos[i].PreCommitSectors + "\t", infos[i].PunishFee + "\t", infos[i].PreCommitDeposits + "\t",
+			infos[i].BlockReward + "\t", infos[i].TAG + "\t", infos[i].MinerAvailableBalance + "\t",
+			infos[i].LockedFunds + "\t", infos[i].InitialPledge + "\t", infos[i].BlockRewardToAvailableBalance + "\t", infos[i].BlockRewardToLockedFunds + "\t"})
+	}
+	w.Flush()
+	spendtime := time.Since(t)
+	fmt.Println("spend time:", spendtime)
 	return infos
 
 }
