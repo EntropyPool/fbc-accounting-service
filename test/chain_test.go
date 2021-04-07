@@ -5,7 +5,7 @@ import (
 	"fmt"
 	accounting "github.com/EntropyPool/fbc-accounting-service/accounting"
 	"github.com/EntropyPool/fbc-accounting-service/rpc"
-	utils "github.com/EntropyPool/fbc-accounting-service/utils"
+	"github.com/EntropyPool/fbc-accounting-service/utils"
 	"strconv"
 	"testing"
 )
@@ -42,12 +42,14 @@ func TestFaulty(t *testing.T) {
 }
 
 func TestPreCommitSector(t *testing.T) {
+	server := accounting.NewAccountingServer("../fbc-accounting-service.conf")
+	minerPreCommitInfo, _ := server.PostgresClient.QueryCalculaDerivedGasOutputs("f0134006", 624646)
+	fmt.Println("0;", minerPreCommitInfo.TotalSendIn)
 	endHeight := int64(624381)
 	oneDayBlock := int64(2880) //一天出块数量
 	subBlock := int64(900)     //一天+900内proveCommit
 	beginHeight := endHeight - oneDayBlock - subBlock
 	minerId := "f0134006"
-	server := accounting.NewAccountingServer("../fbc-accounting-service.conf")
 	var totalPreCommit = "0"
 
 	for i := beginHeight; i < endHeight; i++ {

@@ -122,6 +122,15 @@ type MinerSectorEvents struct {
 	Height    int32  `gorm:"column:height"`
 }
 
+type DerivedCalculationInfos struct {
+	TotalBurnFee            string `gorm:"column:total_burn_fee"` // gorm 字段必须是下划线
+	TotalMinerTip           string `gorm:"column:total_miner_tip"`
+	TotalProveCommitSectors string `gorm:"column:total_prove_commit_sectors"`
+	TotalPreCommitSectors   string `gorm:"column:total_pre_commit_sectors"`
+	TotalSendIn             string `gorm:"column:total_send_in"`
+	TotalSendOut            string `gorm:"column:total_send_out"`
+}
+
 func (cli *PostgresCli) InsertMinerPreCommitInfo(info MinerPreCommitInfos) error {
 	couldBeUpdated := false
 
@@ -158,6 +167,23 @@ func (cli *PostgresCli) QueryDerivedGasOutputs(to string, i int64) ([]DerivedGas
 
 	return info, nil
 
+}
+
+func (cli *PostgresCli) QueryCalculaDerivedGasOutputs(to string, blockNo int64) (*DerivedCalculationInfos, error) {
+
+	var info DerivedCalculationInfos
+	cli.db.Raw("select cast((sum(cast(base_fee_burn as DECIMAL)+cast(over_estimation_burn as DECIMAL))) as VARCHAR)  as total_burn_fee,"+
+		"cast((sum(cast(miner_tip as DECIMAL))) as VARCHAR) as total_miner_tip,"+
+		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_prove_commit_sectors from derived_gas_outputs where \"to\" = ? and height = ? and method =7),"+
+		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_pre_commit_sectors from derived_gas_outputs where \"to\" = ? and height = ? and method =6),"+
+		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_send_in from derived_gas_outputs where \"to\" = ? and height = ? and method =0 ),"+
+		"(select cast((sum(cast(value as DECIMAL))) as VARCHAR) as total_send_out from derived_gas_outputs where \"from\" = ? and height = ? and method =0 ) "+
+		"from derived_gas_outputs where  \"to\" = ? and height =? ", to, blockNo, to, blockNo, to, blockNo, to, blockNo, to, blockNo).Scan(&info)
+
+	//cli.db.Raw("select value as valuem from derived_gas_outputs where \"to\" =? and height =?  limit 1", "f0134006", 624646).Scan(&info)
+	//cli.db.LogMode(true)
+	//cli.db.SetLogger(gorm.Logger{})
+	return &info, nil
 }
 
 func (cli *PostgresCli) QueryMinerSectorInfos(minerId string, i int64) ([]MinerSectorInfos, error) {
