@@ -94,6 +94,7 @@ type MinerInfo struct {
 	InitialPledge                 string `gorm:"column:initialPledge"`
 	BlockRewardToAvailableBalance string `gorm:"column:blockRewardToAvailableBalance"`
 	BlockRewardToLockedFunds      string `gorm:"column:blockRewardToLockedFunds"`
+	SubLockFunds                  string `gorm:"column:SubLockFunds"`
 }
 
 type DailyMinerInfoAvailable struct {

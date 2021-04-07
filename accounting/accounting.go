@@ -1120,6 +1120,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				} else {
 					SubLockFunds = utils.BigIntAddStr(subLockFunds, SubLockFunds)
 				}
+				infos[k-2].SubLockFunds = subLockFunds
 
 				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--Total25PercentRewards:" + TotalTodayRewards + "SubLockFunds:" + SubLockFunds + "\n")
 				// TODO 惩罚
@@ -1242,13 +1243,15 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	w := csv.NewWriter(f)
 	w.Write([]string{"Id", "Balance", "BlockHeight", "Fee", "MinerTip", "SendIn", "SendOut", "Send", "PreCommitSectors",
 		"ProveCommitSectors", "PunishFee", "PreCommitDeposits", "BlockReward", "TAG", "MinerAvailableBalance", "LockedFunds",
-		"InitialPledge", "BlockRewardToAvailableBalance", "BlockRewardToLockedFunds", "Total25PercentRewards", "subLockFunds"})
+		"InitialPledge", "BlockRewardToAvailableBalance", "BlockRewardToLockedFunds", "subLockFunds"})
 	for i := 0; i < len(infos); i++ {
 		w.Write([]string{infos[i].Id + "\t", infos[i].Balance + "\t", strconv.FormatInt(infos[i].BlockHeight, 10) + "\t", infos[i].Fee + "\t",
 			infos[i].MinerTip + "\t", infos[i].SendIn + "\t", infos[i].SendOut + "\t",
-			infos[i].Send + "\t", infos[i].PreCommitSectors + "\t", infos[i].PunishFee + "\t", infos[i].PreCommitDeposits + "\t",
+			infos[i].Send + "\t", infos[i].PreCommitSectors + "\t", infos[i].ProveCommitSectors + "\t", infos[i].PunishFee + "\t",
+			infos[i].PreCommitDeposits + "\t",
 			infos[i].BlockReward + "\t", infos[i].TAG + "\t", infos[i].MinerAvailableBalance + "\t",
-			infos[i].LockedFunds + "\t", infos[i].InitialPledge + "\t", infos[i].BlockRewardToAvailableBalance + "\t", infos[i].BlockRewardToLockedFunds + "\t"})
+			infos[i].LockedFunds + "\t", infos[i].InitialPledge + "\t", infos[i].BlockRewardToAvailableBalance + "\t", infos[i].BlockRewardToLockedFunds + "\t",
+			infos[i].SubLockFunds + "\t"})
 	}
 	w.Flush()
 	spendtime := time.Since(t)
