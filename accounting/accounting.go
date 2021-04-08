@@ -11,6 +11,7 @@ import (
 	utils "github.com/EntropyPool/fbc-accounting-service/utils"
 	httpdaemon "github.com/NpoolRD/http-daemon"
 	"github.com/tealeg/xlsx"
+	gojsonq "github.com/thedevsaddam/gojsonq/v2"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -204,52 +205,64 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 			totalSendOut := "0"
 			totalPreCommitSectors := "0"
 			totalProveCommitSectors := "0"
+			totalWithdrawBalance := "0"
 
-			//derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
-			//if len(derivedGasOutputs) > 0 {
-			//	for j := 0; j < len(derivedGasOutputs); j++ {
-			//		// 出账才有手续费
-			//		if strings.EqualFold(derivedGasOutputs[j].From, account) {
-			//			totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
-			//			totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
-			//			totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
-			//		}
-			//		if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
-			//			totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
-			//			totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
-			//		} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
-			//			totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
-			//			totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
-			//		}
-			//		if derivedGasOutputs[j].Method == 6 {
-			//			totalPreCommitSectors = utils.BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
-			//		}
-			//		if derivedGasOutputs[j].Method == 7 {
-			//			totalProveCommitSectors = utils.BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
-			//		}
-			//	}
+			derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
+			if len(derivedGasOutputs) > 0 {
+				for j := 0; j < len(derivedGasOutputs); j++ {
+					// 出账才有手续费
+					if strings.EqualFold(derivedGasOutputs[j].From, account) {
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
+						totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
+					}
+					if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
+						totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
+					} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
+						totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 6 {
+						totalPreCommitSectors = utils.BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 7 {
+						totalProveCommitSectors = utils.BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+					}
+					// miner withdrawBalance
+					if derivedGasOutputs[j].Method == 16 {
+						// to find parsed_messages method="WithdrawBalance"
+						parsedMessages, _ := s.PostgresClient.QueryParsedMessages(account, i)
+						if len(parsedMessages) > 0 {
+							for j := 0; j < len(parsedMessages); j++ {
+								AmountRequested := gojsonq.New().FromString(parsedMessages[j].Params).Find("AmountRequested")
+								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, AmountRequested.(string))
+							}
+						}
+					}
+				}
+			}
+
+			//derivedCalculationInfos, _ := s.PostgresClient.QueryCalculaDerivedGasOutputs(account, i)
+			//if derivedCalculationInfos.TotalBurnFee != "" {
+			//	totalBurnFee = derivedCalculationInfos.TotalBurnFee
 			//}
-
-			derivedCalculationInfos, _ := s.PostgresClient.QueryCalculaDerivedGasOutputs(account, i)
-			if derivedCalculationInfos.TotalBurnFee != "" {
-				totalBurnFee = derivedCalculationInfos.TotalBurnFee
-			}
-			if derivedCalculationInfos.TotalMinerTip != "" {
-				totalMinerTip = derivedCalculationInfos.TotalMinerTip
-			}
-			if derivedCalculationInfos.TotalSendIn != "" {
-				totalSendIn = derivedCalculationInfos.TotalSendIn
-			}
-			if derivedCalculationInfos.TotalSendOut != "" {
-				totalSendOut = derivedCalculationInfos.TotalSendOut
-			}
-			if derivedCalculationInfos.TotalPreCommitSectors != "" {
-				totalPreCommitSectors = derivedCalculationInfos.TotalPreCommitSectors
-			}
-			if derivedCalculationInfos.TotalProveCommitSectors != "" {
-				totalProveCommitSectors = derivedCalculationInfos.TotalProveCommitSectors
-			}
-			totalSend = utils.BigIntReduceStr(totalSendIn, totalSendOut) // sub + add
+			//if derivedCalculationInfos.TotalMinerTip != "" {
+			//	totalMinerTip = derivedCalculationInfos.TotalMinerTip
+			//}
+			//if derivedCalculationInfos.TotalSendIn != "" {
+			//	totalSendIn = derivedCalculationInfos.TotalSendIn
+			//}
+			//if derivedCalculationInfos.TotalSendOut != "" {
+			//	totalSendOut = derivedCalculationInfos.TotalSendOut
+			//}
+			//if derivedCalculationInfos.TotalPreCommitSectors != "" {
+			//	totalPreCommitSectors = derivedCalculationInfos.TotalPreCommitSectors
+			//}
+			//if derivedCalculationInfos.TotalProveCommitSectors != "" {
+			//	totalProveCommitSectors = derivedCalculationInfos.TotalProveCommitSectors
+			//}
+			//totalSend = utils.BigIntReduceStr(totalSendIn, totalSendOut) // sub + add
 
 			info.Fee = totalBurnFee
 			info.MinerTip = totalMinerTip
@@ -259,9 +272,10 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 			info.PreCommitSectors = totalPreCommitSectors
 			info.ProveCommitSectors = totalProveCommitSectors
 
+			info.WithdrawBalance = totalWithdrawBalance
 			info.BlockReward = "0"
-			info.BlockRewardToAvailableBalance = "0"
-			info.BlockRewardToLockedFunds = "0"
+			//info.BlockRewardToAvailableBalance = "0"
+			//info.BlockRewardToLockedFunds = "0"
 			info.InitialPledge = initialPledge.(string)
 			info.PreCommitDeposits = preCommitDeposits.(string)
 			info.MinerAvailableBalance = minerAvailableBalance.(string)
@@ -325,6 +339,9 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
 						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
+						if !strings.EqualFold(totalWithdrawBalance, "0") { // 去掉提现的部分
+							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, totalWithdrawBalance)
+						}
 						totalPunishFees = utils.BigIntAddStr(totalPunishFees, infos[k-2].PunishFee)
 						fmt.Printf("account--" + account + "---PunishFee-------:" + infos[k-2].PunishFee + "----burn height-----:" + "totalPunishFees1:" + totalPunishFees + "----blockNo:" + strconv.FormatInt(i, 10) + "\n")
 					} else {
@@ -1038,51 +1055,64 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			totalSendOut := "0"
 			totalPreCommitSectors := "0"
 			totalProveCommitSectors := "0"
+			totalWithdrawBalance := "0"
 			TotalTodayRewards := "0"
-			//derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
-			//if len(derivedGasOutputs) > 0 {
-			//	for j := 0; j < len(derivedGasOutputs); j++ {
-			//		// 出账才有手续费
-			//		if strings.EqualFold(derivedGasOutputs[j].From, account) {
-			//			totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
-			//			totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
-			//			totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
-			//		}
-			//		if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
-			//			totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
-			//			totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
-			//		} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
-			//			totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
-			//			totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
-			//		}
-			//		if derivedGasOutputs[j].Method == 6 {
-			//			totalPreCommitSectors = utils.BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
-			//		}
-			//		if derivedGasOutputs[j].Method == 7 {
-			//			totalProveCommitSectors = utils.BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
-			//		}
-			//	}
+
+			derivedGasOutputs, _ := s.PostgresClient.QueryDerivedGasOutputs(account, i)
+			if len(derivedGasOutputs) > 0 {
+				for j := 0; j < len(derivedGasOutputs); j++ {
+					// 出账才有手续费
+					if strings.EqualFold(derivedGasOutputs[j].From, account) {
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].BaseFeeBurn)
+						totalBurnFee = utils.BigIntAddStr(totalBurnFee, derivedGasOutputs[j].OverEstimationBurn)
+						totalMinerTip = utils.BigIntAddStr(totalMinerTip, derivedGasOutputs[j].MinerTip)
+					}
+					if strings.EqualFold(derivedGasOutputs[j].From, account) && derivedGasOutputs[j].Method == 0 { // sub
+						totalSend = utils.BigIntReduceStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendOut = utils.BigIntReduceStr(totalSendOut, derivedGasOutputs[j].Value)
+					} else if strings.EqualFold(derivedGasOutputs[j].To, account) && derivedGasOutputs[j].Method == 0 { // add
+						totalSend = utils.BigIntAddStr(totalSend, derivedGasOutputs[j].Value)
+						totalSendIn = utils.BigIntAddStr(totalSendIn, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 6 {
+						totalPreCommitSectors = utils.BigIntAddStr(totalPreCommitSectors, derivedGasOutputs[j].Value)
+					}
+					if derivedGasOutputs[j].Method == 7 {
+						totalProveCommitSectors = utils.BigIntAddStr(totalProveCommitSectors, derivedGasOutputs[j].Value)
+					}
+					// miner withdrawBalance
+					if derivedGasOutputs[j].Method == 16 {
+						// to find parsed_messages method="WithdrawBalance"
+						parsedMessages, _ := s.PostgresClient.QueryParsedMessages(account, i)
+						if len(parsedMessages) > 0 {
+							for j := 0; j < len(parsedMessages); j++ {
+								AmountRequested := gojsonq.New().FromString(parsedMessages[j].Params).Find("AmountRequested")
+								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, AmountRequested.(string))
+							}
+						}
+					}
+				}
+			}
+			//derivedCalculationInfos, _ := s.PostgresClient.QueryCalculaDerivedGasOutputs(account, i)
+			//if derivedCalculationInfos.TotalBurnFee != "" {
+			//	totalBurnFee = derivedCalculationInfos.TotalBurnFee
 			//}
-			derivedCalculationInfos, _ := s.PostgresClient.QueryCalculaDerivedGasOutputs(account, i)
-			if derivedCalculationInfos.TotalBurnFee != "" {
-				totalBurnFee = derivedCalculationInfos.TotalBurnFee
-			}
-			if derivedCalculationInfos.TotalMinerTip != "" {
-				totalMinerTip = derivedCalculationInfos.TotalMinerTip
-			}
-			if derivedCalculationInfos.TotalSendIn != "" {
-				totalSendIn = derivedCalculationInfos.TotalSendIn
-			}
-			if derivedCalculationInfos.TotalSendOut != "" {
-				totalSendOut = derivedCalculationInfos.TotalSendOut
-			}
-			if derivedCalculationInfos.TotalPreCommitSectors != "" {
-				totalPreCommitSectors = derivedCalculationInfos.TotalPreCommitSectors
-			}
-			if derivedCalculationInfos.TotalProveCommitSectors != "" {
-				totalProveCommitSectors = derivedCalculationInfos.TotalProveCommitSectors
-			}
-			totalSend = utils.BigIntReduceStr(totalSendIn, totalSendOut) // sub + add
+			//if derivedCalculationInfos.TotalMinerTip != "" {
+			//	totalMinerTip = derivedCalculationInfos.TotalMinerTip
+			//}
+			//if derivedCalculationInfos.TotalSendIn != "" {
+			//	totalSendIn = derivedCalculationInfos.TotalSendIn
+			//}
+			//if derivedCalculationInfos.TotalSendOut != "" {
+			//	totalSendOut = derivedCalculationInfos.TotalSendOut
+			//}
+			//if derivedCalculationInfos.TotalPreCommitSectors != "" {
+			//	totalPreCommitSectors = derivedCalculationInfos.TotalPreCommitSectors
+			//}
+			//if derivedCalculationInfos.TotalProveCommitSectors != "" {
+			//	totalProveCommitSectors = derivedCalculationInfos.TotalProveCommitSectors
+			//}
+			//totalSend = utils.BigIntReduceStr(totalSendIn, totalSendOut) // sub + add
 
 			info.Fee = totalBurnFee
 			info.MinerTip = totalMinerTip
@@ -1093,13 +1123,14 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			info.PreCommitSectors = totalPreCommitSectors
 			info.ProveCommitSectors = totalProveCommitSectors
 
+			info.WithdrawBalance = totalWithdrawBalance
 			info.BlockReward = "0"
 			info.PunishFee = "0"
 			info.MinerAvailableBalance = minerAvailableBalance.(string)
 			info.LockedFunds = lockedFunds.(string)
 			info.InitialPledge = initialPledge.(string)
-			info.BlockRewardToAvailableBalance = "0"
-			info.BlockRewardToLockedFunds = "0"
+			//info.BlockRewardToAvailableBalance = "0"
+			//info.BlockRewardToLockedFunds = "0"
 			info.Balance = minerBalance.(string)
 			infos = append(infos, info)
 			var k = len(infos)
@@ -1148,6 +1179,9 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
 						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
+						if !strings.EqualFold(totalWithdrawBalance, "0") { // 去掉提现的部分
+							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, totalWithdrawBalance)
+						}
 						fmt.Printf("account--" + account + "----burn height-----:" + strconv.FormatInt(i, 10) + "\n")
 					} else {
 						infos[k-3].PunishFee = "0"
@@ -1261,15 +1295,14 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	w := csv.NewWriter(f)
 	w.Write([]string{"Id", "Balance", "BlockHeight", "Fee", "MinerTip", "SendIn", "SendOut", "Send", "PreCommitSectors",
 		"ProveCommitSectors", "PunishFee", "PreCommitDeposits", "BlockReward", "TAG", "MinerAvailableBalance", "LockedFunds",
-		"InitialPledge", "BlockRewardToAvailableBalance", "BlockRewardToLockedFunds", "subLockFunds"})
+		"InitialPledge", "subLockFunds", "WithdrawBalance"})
 	for i := 0; i < len(infos); i++ {
 		w.Write([]string{infos[i].Id + "\t", infos[i].Balance + "\t", strconv.FormatInt(infos[i].BlockHeight, 10) + "\t", infos[i].Fee + "\t",
 			infos[i].MinerTip + "\t", infos[i].SendIn + "\t", infos[i].SendOut + "\t",
 			infos[i].Send + "\t", infos[i].PreCommitSectors + "\t", infos[i].ProveCommitSectors + "\t", infos[i].PunishFee + "\t",
-			infos[i].PreCommitDeposits + "\t",
-			infos[i].BlockReward + "\t", infos[i].TAG + "\t", infos[i].MinerAvailableBalance + "\t",
-			infos[i].LockedFunds + "\t", infos[i].InitialPledge + "\t", infos[i].BlockRewardToAvailableBalance + "\t", infos[i].BlockRewardToLockedFunds + "\t",
-			infos[i].SubLockFunds + "\t"})
+			infos[i].PreCommitDeposits + "\t", infos[i].BlockReward + "\t", infos[i].TAG + "\t", infos[i].MinerAvailableBalance + "\t",
+			infos[i].LockedFunds + "\t", infos[i].InitialPledge + "\t",
+			infos[i].SubLockFunds + "\t", infos[i].WithdrawBalance + "\t"})
 	}
 	w.Flush()
 	spendtime := time.Since(t)

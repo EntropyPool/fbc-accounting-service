@@ -131,6 +131,17 @@ type DerivedCalculationInfos struct {
 	TotalSendOut            string `gorm:"column:total_send_out"`
 }
 
+// table parsed_messages
+type ParsedMessages struct {
+	Cid     string `gorm:"column:cid"`
+	BlockNo string `gorm:"column:height"`
+	From    string `gorm:"column:from"`
+	To      string `gorm:"column:to"`
+	Value   string `gorm:"column:value"`
+	Method  string `gorm:"column:method"`
+	Params  string `gorm:"column:params"`
+}
+
 func (cli *PostgresCli) InsertMinerPreCommitInfo(info MinerPreCommitInfos) error {
 	couldBeUpdated := false
 
@@ -159,6 +170,20 @@ func (cli *PostgresCli) InsertMinerPreCommitInfo(info MinerPreCommitInfos) error
 func (cli *PostgresCli) QueryDerivedGasOutputs(to string, i int64) ([]DerivedGasOutputs, error) {
 
 	var info []DerivedGasOutputs
+	var count int
+	cli.db.Where("(\"to\" = ? or \"from\" = ?) AND height = ?", to, to, i).Find(&info).Count(&count)
+	if count == 0 {
+		return nil, xerrors.Errorf("cannot find any value")
+	}
+
+	return info, nil
+
+}
+
+// parsed_messages
+func (cli *PostgresCli) QueryParsedMessages(to string, i int64) ([]ParsedMessages, error) {
+
+	var info []ParsedMessages
 	var count int
 	cli.db.Where("(\"to\" = ? or \"from\" = ?) AND height = ?", to, to, i).Find(&info).Count(&count)
 	if count == 0 {

@@ -83,18 +83,19 @@ type WorkerInfo struct {
 // miner account
 type MinerInfo struct {
 	AccountInfo
-	PunishFee                     string `gorm:"column:punishFee"` // 惩罚
-	PreCommitDeposits             string `gorm:"column:preCommitDeposits"`
-	PreCommitSectors              string `gorm:"column:preCommitSectors"`
-	ProveCommitSectors            string `gorm:"column:proveCommitSectors"`
-	BlockReward                   string `gorm:"column:blockReward"`
-	TAG                           string `gorm:"column:tag"`
-	MinerAvailableBalance         string `gorm:"column:minerAvailableBalance"`
-	LockedFunds                   string `gorm:"column:lockedFunds"`
-	InitialPledge                 string `gorm:"column:initialPledge"`
-	BlockRewardToAvailableBalance string `gorm:"column:blockRewardToAvailableBalance"`
-	BlockRewardToLockedFunds      string `gorm:"column:blockRewardToLockedFunds"`
-	SubLockFunds                  string `gorm:"column:SubLockFunds"`
+	PunishFee             string `gorm:"column:punishFee"` // 惩罚
+	PreCommitDeposits     string `gorm:"column:preCommitDeposits"`
+	PreCommitSectors      string `gorm:"column:preCommitSectors"`
+	ProveCommitSectors    string `gorm:"column:proveCommitSectors"`
+	BlockReward           string `gorm:"column:blockReward"`
+	TAG                   string `gorm:"column:tag"`
+	MinerAvailableBalance string `gorm:"column:minerAvailableBalance"`
+	LockedFunds           string `gorm:"column:lockedFunds"`
+	InitialPledge         string `gorm:"column:initialPledge"`
+	//BlockRewardToAvailableBalance string `gorm:"column:blockRewardToAvailableBalance"`
+	//BlockRewardToLockedFunds      string `gorm:"column:blockRewardToLockedFunds"`
+	SubLockFunds    string `gorm:"column:SubLockFunds"`
+	WithdrawBalance string `gorm:"column:WithdrawBalance"`
 }
 
 type DailyMinerInfoAvailable struct {
