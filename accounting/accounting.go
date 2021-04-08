@@ -174,7 +174,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			reallyBlockNo := resultMap["result"].(map[string]interface{})["Height"]
-			int64ReallyBlockNo, _ := strconv.ParseInt(reallyBlockNo.(string), 10, 64)
+			int64ReallyBlockNo := int64(reallyBlockNo.(float64))
 			var flagBlockIsNull = false
 			if int64ReallyBlockNo == i-1 {
 				flagBlockIsNull = true
@@ -977,7 +977,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			reallyBlockNo := resultMap["result"].(map[string]interface{})["Height"]
-			int64ReallyBlockNo, _ := strconv.ParseInt(reallyBlockNo.(string), 10, 64)
+			int64ReallyBlockNo := int64(reallyBlockNo.(float64))
 			var flagBlockIsNull = false
 			if int64ReallyBlockNo == i-1 {
 				flagBlockIsNull = true
@@ -1133,7 +1133,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 							fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---totalWithdrawBalance-------:" + infos[k-2].WithdrawBalance + "\n")
 							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, infos[k-2].WithdrawBalance)
 						}
-						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---burn-PunishFee-------:" + infos[k-2].PunishFee + "---totalPunishFees:" + totalPunishFees + "\n")
+						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---burn-PunishFee-------:" + infos[k-2].PunishFee + "\n")
 					} else {
 						infos[k-3].PunishFee = "0"
 						infos[k-3].TAG = ""
