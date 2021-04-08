@@ -228,13 +228,6 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					}
 					// miner withdrawBalance
 					if derivedGasOutputs[j].Method == 16 {
-						// to find parsed_messages method="WithdrawBalance"
-						//method := "WithdrawBalance"
-						//parsedMessages, _ := s.PostgresClient.QueryParsedMessages(account, i, method, derivedGasOutputs[j].Cid)
-						//if parsedMessages != nil {
-						//	AmountRequested := gojsonq.New().FromString(parsedMessages.Params).Find("AmountRequested")
-						//	totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, AmountRequested.(string))
-						//}
 						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----derivedGasOutputs[j].Cid-------------------------:" + derivedGasOutputs[j].Cid + "\n")
 						stateReplayResult := filrpc.StateReplay(cidStr, derivedGasOutputs[j].Cid)
 						if stateReplayResult != "" {
@@ -248,27 +241,6 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					}
 				}
 			}
-
-			//derivedCalculationInfos, _ := s.PostgresClient.QueryCalculaDerivedGasOutputs(account, i)
-			//if derivedCalculationInfos.TotalBurnFee != "" {
-			//	totalBurnFee = derivedCalculationInfos.TotalBurnFee
-			//}
-			//if derivedCalculationInfos.TotalMinerTip != "" {
-			//	totalMinerTip = derivedCalculationInfos.TotalMinerTip
-			//}
-			//if derivedCalculationInfos.TotalSendIn != "" {
-			//	totalSendIn = derivedCalculationInfos.TotalSendIn
-			//}
-			//if derivedCalculationInfos.TotalSendOut != "" {
-			//	totalSendOut = derivedCalculationInfos.TotalSendOut
-			//}
-			//if derivedCalculationInfos.TotalPreCommitSectors != "" {
-			//	totalPreCommitSectors = derivedCalculationInfos.TotalPreCommitSectors
-			//}
-			//if derivedCalculationInfos.TotalProveCommitSectors != "" {
-			//	totalProveCommitSectors = derivedCalculationInfos.TotalProveCommitSectors
-			//}
-			//totalSend = utils.BigIntReduceStr(totalSendIn, totalSendOut) // sub + add
 
 			info.Fee = totalBurnFee
 			info.MinerTip = totalMinerTip
