@@ -96,6 +96,7 @@ type MinerInfo struct {
 	//BlockRewardToLockedFunds      string `gorm:"column:blockRewardToLockedFunds"`
 	SubLockFunds    string `gorm:"column:SubLockFunds"`
 	WithdrawBalance string `gorm:"column:WithdrawBalance"`
+	FlagBlockIsNull bool   `gorm:"column:FlagBlockIsNull"`
 }
 
 type DailyMinerInfoAvailable struct {

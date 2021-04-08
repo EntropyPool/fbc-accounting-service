@@ -173,6 +173,12 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
+			reallyBlockNo := resultMap["result"].(map[string]interface{})["Height"]
+			int64ReallyBlockNo, _ := strconv.ParseInt(reallyBlockNo.(string), 10, 64)
+			var flagBlockIsNull = false
+			if int64ReallyBlockNo == i-1 {
+				flagBlockIsNull = true
+			}
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
 			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
@@ -252,8 +258,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 
 			info.WithdrawBalance = totalWithdrawBalance
 			info.BlockReward = "0"
-			//info.BlockRewardToAvailableBalance = "0"
-			//info.BlockRewardToLockedFunds = "0"
+			info.FlagBlockIsNull = flagBlockIsNull
 			info.InitialPledge = initialPledge.(string)
 			info.PreCommitDeposits = preCommitDeposits.(string)
 			info.MinerAvailableBalance = minerAvailableBalance.(string)
@@ -275,10 +280,17 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					infos[k-2].BlockReward = utils.BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
 					infos[k-2].BlockReward = utils.BigIntAddStr(infos[k-2].BlockReward, infos[k-2].WithdrawBalance)
 					// 特殊情况 : 下一个高度是空块 作差也会大于0 因为空块余额不变化，而且没将上一个高度的pre 和pro 加进来
-					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
-					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
-					// TODO block is null
-					if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
+					// 特殊情况： 下一个高度是空块，而此时出块了，此时计算到出块的奖励应该给到 infos[k-3].blockReward
+					//k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+					//var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
+					//// TODO block is null
+					//if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
+					//	infos[k-2].BlockReward = "0"
+					//	infos[k-2].TAG = "block is null"
+					//}
+					// block is null
+					if infos[k-2].FlagBlockIsNull {
+						infos[k-3].BlockReward = infos[k-2].BlockReward //将值赋给上一层
 						infos[k-2].BlockReward = "0"
 						infos[k-2].TAG = "block is null"
 					}
@@ -964,6 +976,12 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
+			reallyBlockNo := resultMap["result"].(map[string]interface{})["Height"]
+			int64ReallyBlockNo, _ := strconv.ParseInt(reallyBlockNo.(string), 10, 64)
+			var flagBlockIsNull = false
+			if int64ReallyBlockNo == i-1 {
+				flagBlockIsNull = true
+			}
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
 			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
@@ -1046,6 +1064,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 
 			info.WithdrawBalance = totalWithdrawBalance
 			info.BlockReward = "0"
+			info.FlagBlockIsNull = flagBlockIsNull
 			info.PunishFee = "0"
 			info.MinerAvailableBalance = minerAvailableBalance.(string)
 			info.LockedFunds = lockedFunds.(string)
@@ -1057,15 +1076,23 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			if k >= 2 {
 				subBalance := utils.BigIntReduceStr(infos[k-1].Balance, infos[k-2].Balance)
 				totalPreCommitSectors := utils.BigIntAddStr(infos[k-2].PreCommitSectors, infos[k-2].ProveCommitSectors)
+
+				// TODO 出块奖励
 				infos[k-2].BlockReward = utils.BigIntReduceStr(subBalance, totalPreCommitSectors)
 				blockReward, _ := strconv.ParseInt(infos[k-2].BlockReward, 10, 64)
 				if blockReward > 0 {
 					infos[k-2].BlockReward = utils.BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
 					infos[k-2].BlockReward = utils.BigIntAddStr(infos[k-2].BlockReward, infos[k-2].WithdrawBalance)
-					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
-					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
-					// TODO block is null
-					if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
+
+					//k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+					//var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
+					//// TODO block is null
+					//if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
+					//	infos[k-2].BlockReward = "0"
+					//	infos[k-2].TAG = "block is null"
+					//}
+					if infos[k-2].FlagBlockIsNull {
+						infos[k-3].BlockReward = infos[k-2].BlockReward //将值赋值给上一层
 						infos[k-2].BlockReward = "0"
 						infos[k-2].TAG = "block is null"
 					}
@@ -1074,6 +1101,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					infos[k-2].BlockReward = "0"
 				}
 
+				// TODO 线性释放的金额
 				add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
 				add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
 				add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
@@ -1093,6 +1121,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				infos[k-2].SubLockFunds = subLockFunds
 
 				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--Total25PercentRewards:" + TotalTodayRewards + "SubLockFunds:" + SubLockFunds + "\n")
+
 				// TODO 惩罚
 				addBalance := utils.BigIntAddStr(totalPreCommitSectors, infos[k-2].BlockReward)
 				addBalance = utils.BigIntAddStr(addBalance, infos[k-2].Send)
