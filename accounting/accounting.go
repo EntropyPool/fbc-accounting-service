@@ -11,7 +11,6 @@ import (
 	utils "github.com/EntropyPool/fbc-accounting-service/utils"
 	httpdaemon "github.com/NpoolRD/http-daemon"
 	"github.com/tealeg/xlsx"
-	gojsonq "github.com/thedevsaddam/gojsonq/v2"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -158,8 +157,6 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		MinerPower = stateMinerPowerMap["result"].(map[string]interface{})["MinerPower"].(map[string]interface{})["RawBytePower"]
 	}
 
-	//var MinerPower string
-
 	totalPunishFees := "0"
 	var minerAvailableBalance interface{}
 	var preCommitDeposits interface{}
@@ -232,13 +229,22 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					// miner withdrawBalance
 					if derivedGasOutputs[j].Method == 16 {
 						// to find parsed_messages method="WithdrawBalance"
-						parsedMessages, _ := s.PostgresClient.QueryParsedMessages(account, i)
-						if len(parsedMessages) > 0 {
-							for j := 0; j < len(parsedMessages); j++ {
-								AmountRequested := gojsonq.New().FromString(parsedMessages[j].Params).Find("AmountRequested")
-								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, AmountRequested.(string))
+						//method := "WithdrawBalance"
+						//parsedMessages, _ := s.PostgresClient.QueryParsedMessages(account, i, method, derivedGasOutputs[j].Cid)
+						//if parsedMessages != nil {
+						//	AmountRequested := gojsonq.New().FromString(parsedMessages.Params).Find("AmountRequested")
+						//	totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, AmountRequested.(string))
+						//}
+						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----derivedGasOutputs[j].Cid-------------------------:" + derivedGasOutputs[j].Cid + "\n")
+						stateReplayResult := filrpc.StateReplay(cidStr, derivedGasOutputs[j].Cid)
+						if stateReplayResult != "" {
+							var stateReadStateMap map[string]interface{}
+							if err := json.Unmarshal([]byte(stateReplayResult), &stateReadStateMap); err == nil {
+								withdrawBalance := stateReadStateMap["result"].(map[string]interface{})["ExecutionTrace"].(map[string]interface{})["Subcalls"].([]interface{})[0].(map[string]interface{})["Msg"].(map[string]interface{})["Value"]
+								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, withdrawBalance.(string))
 							}
 						}
+						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----totalWithdrawBalance-------------------------:" + totalWithdrawBalance + "\n")
 					}
 				}
 			}
@@ -295,6 +301,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 				if blockReward > 0 {
 					// 区块奖励实际 = 区块奖励预判 - 上一个高度的收支send
 					infos[k-2].BlockReward = utils.BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
+					infos[k-2].BlockReward = utils.BigIntAddStr(infos[k-2].BlockReward, infos[k-2].WithdrawBalance)
 					// 特殊情况 : 下一个高度是空块 作差也会大于0 因为空块余额不变化，而且没将上一个高度的pre 和pro 加进来
 					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
 					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
@@ -305,6 +312,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					}
 					// 累计每天的奖励
 					TodayBlockRewards = utils.BigIntAddStr(TodayBlockRewards, infos[k-2].BlockReward)
+					//fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--BlockReward:" + infos[k-2].BlockReward + "\n")
 
 				} else if blockReward < 0 {
 					// maybe this block is null or other unknown bug
@@ -312,13 +320,15 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 				}
 
 				// 求某个高度 线性释放的金额  = （下一高度的可用余额-上一个高度可用余额）-(上一个高度的(pre + pro + InitialPledge + PreCommitDeposits + send) - 下一个高度的（PreCommitDeposits+InitialPledge）)
-
 				add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
 				add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
 				add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
 				add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
 				add2 = utils.BigIntAddStr(totalPreCommitSectorss, add2)
 				add2 = utils.BigIntAddStr(infos[k-2].MinerAvailableBalance, add2)
+				if !strings.EqualFold(infos[k-2].WithdrawBalance, "0") { // miner withdrawBalance
+					add2 = utils.BigIntReduceStr(add2, infos[k-2].WithdrawBalance)
+				}
 				subBlockRewardAvalible := utils.BigIntReduceStr(add1, add2)
 				TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
 
@@ -328,7 +338,6 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 				} else {
 					SubLockFunds = utils.BigIntAddStr(subLockFunds, SubLockFunds)
 				}
-				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--TotalTodayRewards:" + TotalTodayRewards + "\n")
 
 				// TODO 惩罚
 				// 惩罚 = 上一个高度的 （pre+ pro + blockreward + 收支send）- 两个高度的余额差
@@ -339,21 +348,29 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
 						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
-						if !strings.EqualFold(totalWithdrawBalance, "0") { // 去掉提现的部分
-							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, totalWithdrawBalance)
+						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---totalWithdrawBalance0-------:" + infos[k-2].WithdrawBalance + "\n")
+						if !strings.EqualFold(infos[k-2].WithdrawBalance, "0") { // 去掉提现的部分
+							fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---totalWithdrawBalance-------:" + infos[k-2].WithdrawBalance + "\n")
+							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, infos[k-2].WithdrawBalance)
 						}
 						totalPunishFees = utils.BigIntAddStr(totalPunishFees, infos[k-2].PunishFee)
-						fmt.Printf("account--" + account + "---PunishFee-------:" + infos[k-2].PunishFee + "----burn height-----:" + "totalPunishFees1:" + totalPunishFees + "----blockNo:" + strconv.FormatInt(i, 10) + "\n")
+						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---burn-PunishFee-------:" + infos[k-2].PunishFee + "---totalPunishFees:" + totalPunishFees + "\n")
 					} else {
 						// 将空块 误认为是惩罚的 减掉
 						totalPunishFees = utils.BigIntReduceStr(totalPunishFees, infos[k-3].PunishFee)
-						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "k3:" + infos[k-3].PunishFee + "---totalPunishFees2:" + totalPunishFees + "\n")
+						//fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---return---PunishFee----:" + infos[k-3].PunishFee + "---totalPunishFees:" + totalPunishFees + "\n")
 						infos[k-3].PunishFee = "0"
 						infos[k-3].TAG = ""
 					}
 					// 或者 subBalance=addBalance 且 lockFunds 不相等
 				} else if strings.EqualFold(infos[k-1].Balance, infos[k-2].Balance) && !strings.EqualFold(subLockFunds, "0") {
-					fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---PunishFees may be lost miner power :" + subLockFunds + "\n")
+					// maybe 惩罚
+					//if strings.Contains(subLockFunds, "-") { //小于0
+					//	totalPunishFees = utils.BigIntAddStr(totalPunishFees, subLockFunds)
+					//} else {
+					//	totalPunishFees = utils.BigIntReduceStr(totalPunishFees, subLockFunds)
+					//}
+					//fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---lockFunds不相等 :" + subLockFunds + "\n")
 				}
 
 			}
@@ -361,7 +378,6 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		}
 	}
 	// SubLockFunds 含有 PunishFee
-	fmt.Println("SubLockFunds:", SubLockFunds, "\n")
 	Total := utils.BigIntAddStr(TotalTodayRewards, SubLockFunds)
 	// 除了正常出块，剩下的为线性释放
 	Today180PercentRewards := utils.BigIntReduceStr(Total, TodayBlockRewards)
@@ -375,6 +391,8 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	DailyRewardInfos.Today25PercentRewards = Today25PercentRewards
 	DailyRewardInfos.Today180PercentRewards = Today180PercentRewards
 	DailyRewardInfos.MinerPower = MinerPower.(string)
+	fmt.Println("result: \n TodayBlockRewards:", TodayBlockRewards, "---", "SubLockFunds:", SubLockFunds, "---", "TotalTodayRewards:", TotalTodayRewards, "---",
+		"PunishFee:", totalPunishFees, "---", "Today180PercentRewards:", Today180PercentRewards)
 	return DailyRewardInfos, "", 0
 }
 
@@ -959,57 +977,6 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 
 	t := time.Now()
 
-	//var file *xlsx.File
-	//var sheet *xlsx.Sheet
-	//var row *xlsx.Row
-	//var cell *xlsx.Cell
-	//file = xlsx.NewFile()
-	//sheet, _ = file.AddSheet("Sheet1")
-	//row = sheet.AddRow()
-	//// add title
-	//cell = row.AddCell()
-	//cell.Value = "Id"
-	//cell = row.AddCell()
-	//cell.Value = "Balance"
-	//cell = row.AddCell()
-	//cell.Value = "BlockHeight"
-	//cell = row.AddCell()
-	//cell.Value = "Fee"
-	//cell = row.AddCell()
-	//cell.Value = "MinerTip"
-	//cell = row.AddCell()
-	//cell.Value = "SendIn"
-	//cell = row.AddCell()
-	//cell.Value = "SendOut"
-	//cell = row.AddCell()
-	//cell.Value = "Send"
-	//cell = row.AddCell()
-	//cell.Value = "PreCommitSectors"
-	//cell = row.AddCell()
-	//cell.Value = "ProveCommitSectors"
-	//cell = row.AddCell()
-	//cell.Value = "PunishFee"
-	//cell = row.AddCell()
-	//cell.Value = "PreCommitDeposits"
-	//cell = row.AddCell()
-	//cell.Value = "BlockReward"
-	//cell = row.AddCell()
-	//cell.Value = "TAG"
-	//cell = row.AddCell()
-	//cell.Value = "MinerAvailableBalance"
-	//cell = row.AddCell()
-	//cell.Value = "LockedFunds"
-	//cell = row.AddCell()
-	//cell.Value = "InitialPledge"
-	//cell = row.AddCell()
-	//cell.Value = "BlockRewardToAvailableBalance"
-	//cell = row.AddCell()
-	//cell.Value = "BlockRewardToLockedFunds"
-	//cell = row.AddCell()
-	//cell.Value = "Total25PercentRewards"
-	//cell = row.AddCell()
-	//cell.Value = "subLockFunds"
-
 	var infos []types.MinerInfo
 	var minerAvailableBalance interface{}
 	var preCommitDeposits interface{}
@@ -1082,37 +1049,19 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					}
 					// miner withdrawBalance
 					if derivedGasOutputs[j].Method == 16 {
-						// to find parsed_messages method="WithdrawBalance"
-						parsedMessages, _ := s.PostgresClient.QueryParsedMessages(account, i)
-						if len(parsedMessages) > 0 {
-							for j := 0; j < len(parsedMessages); j++ {
-								AmountRequested := gojsonq.New().FromString(parsedMessages[j].Params).Find("AmountRequested")
-								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, AmountRequested.(string))
+						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----derivedGasOutputs[j].Cid-------------------------:" + derivedGasOutputs[j].Cid + "\n")
+						stateReplayResult := filrpc.StateReplay(cidStr, derivedGasOutputs[j].Cid)
+						if stateReplayResult != "" {
+							var stateReadStateMap map[string]interface{}
+							if err := json.Unmarshal([]byte(stateReplayResult), &stateReadStateMap); err == nil {
+								withdrawBalance := stateReadStateMap["result"].(map[string]interface{})["ExecutionTrace"].(map[string]interface{})["Subcalls"].([]interface{})[0].(map[string]interface{})["Msg"].(map[string]interface{})["Value"]
+								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, withdrawBalance.(string))
 							}
 						}
+						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----totalWithdrawBalance-------------------------:" + totalWithdrawBalance + "\n")
 					}
 				}
 			}
-			//derivedCalculationInfos, _ := s.PostgresClient.QueryCalculaDerivedGasOutputs(account, i)
-			//if derivedCalculationInfos.TotalBurnFee != "" {
-			//	totalBurnFee = derivedCalculationInfos.TotalBurnFee
-			//}
-			//if derivedCalculationInfos.TotalMinerTip != "" {
-			//	totalMinerTip = derivedCalculationInfos.TotalMinerTip
-			//}
-			//if derivedCalculationInfos.TotalSendIn != "" {
-			//	totalSendIn = derivedCalculationInfos.TotalSendIn
-			//}
-			//if derivedCalculationInfos.TotalSendOut != "" {
-			//	totalSendOut = derivedCalculationInfos.TotalSendOut
-			//}
-			//if derivedCalculationInfos.TotalPreCommitSectors != "" {
-			//	totalPreCommitSectors = derivedCalculationInfos.TotalPreCommitSectors
-			//}
-			//if derivedCalculationInfos.TotalProveCommitSectors != "" {
-			//	totalProveCommitSectors = derivedCalculationInfos.TotalProveCommitSectors
-			//}
-			//totalSend = utils.BigIntReduceStr(totalSendIn, totalSendOut) // sub + add
 
 			info.Fee = totalBurnFee
 			info.MinerTip = totalMinerTip
@@ -1129,8 +1078,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			info.MinerAvailableBalance = minerAvailableBalance.(string)
 			info.LockedFunds = lockedFunds.(string)
 			info.InitialPledge = initialPledge.(string)
-			//info.BlockRewardToAvailableBalance = "0"
-			//info.BlockRewardToLockedFunds = "0"
+
 			info.Balance = minerBalance.(string)
 			infos = append(infos, info)
 			var k = len(infos)
@@ -1141,6 +1089,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				blockReward, _ := strconv.ParseInt(infos[k-2].BlockReward, 10, 64)
 				if blockReward > 0 {
 					infos[k-2].BlockReward = utils.BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
+					infos[k-2].BlockReward = utils.BigIntAddStr(infos[k-2].BlockReward, infos[k-2].WithdrawBalance)
 					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
 					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
 					// TODO block is null
@@ -1179,119 +1128,32 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
 						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
-						if !strings.EqualFold(totalWithdrawBalance, "0") { // 去掉提现的部分
-							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, totalWithdrawBalance)
+						if !strings.EqualFold(infos[k-2].WithdrawBalance, "0") { // 去掉提现的部分
+							fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---totalWithdrawBalance-------:" + infos[k-2].WithdrawBalance + "\n")
+							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, infos[k-2].WithdrawBalance)
 						}
-						fmt.Printf("account--" + account + "----burn height-----:" + strconv.FormatInt(i, 10) + "\n")
+						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---burn-PunishFee-------:" + infos[k-2].PunishFee + "---totalPunishFees:" + totalPunishFees + "\n")
 					} else {
 						infos[k-3].PunishFee = "0"
 						infos[k-3].TAG = ""
-						// TODO excel update infos[k-3].TAG
 					}
 					// 或者 subBalance=addBalance 且 lockFunds 不相等
 				} else if strings.EqualFold(infos[k-1].Balance, infos[k-2].Balance) && !strings.EqualFold(subLockFunds, "0") {
-					fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---PunishFees may be lost miner power :" + subLockFunds + "\n")
+					fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---lockFunds不相等 :" + subLockFunds + "\n")
 					infos[k-2].TAG = "掉算力惩罚(销毁)"
 					infos[k-2].PunishFee = subLockFunds
 				}
 
-				//row = sheet.AddRow()
-				//// add title
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].Id
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].Balance
-				//cell = row.AddCell()
-				//cell.Value = strconv.FormatInt(infos[k-2].BlockHeight, 10)
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].Fee
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].MinerTip
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].SendIn
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].SendOut
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].Send
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].PreCommitSectors
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].ProveCommitSectors
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].PunishFee
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].PreCommitDeposits
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].BlockReward
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].TAG
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].MinerAvailableBalance
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].LockedFunds
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].InitialPledge
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].BlockRewardToAvailableBalance
-				//cell = row.AddCell()
-				//cell.Value = infos[k-2].BlockRewardToLockedFunds
-				//cell = row.AddCell()
-				//cell.Value = subBlockRewardAvalible
-				//cell = row.AddCell()
-				//cell.Value = subLockFunds
 			}
-			//if int64(k)-1 == (realEndHeight - realStartHeight) {
-			//	row = sheet.AddRow()
-			//	// add title
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].Id
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].Balance
-			//	cell = row.AddCell()
-			//	cell.Value = strconv.FormatInt(infos[k-1].BlockHeight, 10)
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].Fee
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].MinerTip
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].SendIn
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].SendOut
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].Send
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].PreCommitSectors
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].ProveCommitSectors
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].PunishFee
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].PreCommitDeposits
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].BlockReward
-			//	cell = row.AddCell()
-			//	cell.Value = "" // tag
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].MinerAvailableBalance
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].LockedFunds
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].InitialPledge
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].BlockRewardToAvailableBalance
-			//	cell = row.AddCell()
-			//	cell.Value = infos[k-1].BlockRewardToLockedFunds
-			//}
+
 		}
 	}
-	//file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "miner.xlsx")
 	f, err := os.Create("./" + account + "filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + ".csv")
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
 	f.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
-	//f.WriteString()
 	w := csv.NewWriter(f)
 	w.Write([]string{"Id", "Balance", "BlockHeight", "Fee", "MinerTip", "SendIn", "SendOut", "Send", "PreCommitSectors",
 		"ProveCommitSectors", "PunishFee", "PreCommitDeposits", "BlockReward", "TAG", "MinerAvailableBalance", "LockedFunds",

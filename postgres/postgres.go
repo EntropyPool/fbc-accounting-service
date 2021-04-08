@@ -181,16 +181,16 @@ func (cli *PostgresCli) QueryDerivedGasOutputs(to string, i int64) ([]DerivedGas
 }
 
 // parsed_messages
-func (cli *PostgresCli) QueryParsedMessages(to string, i int64) ([]ParsedMessages, error) {
+func (cli *PostgresCli) QueryParsedMessages(to string, i int64, method string, cid string) (*ParsedMessages, error) {
 
-	var info []ParsedMessages
+	var info ParsedMessages
 	var count int
-	cli.db.Where("(\"to\" = ? or \"from\" = ?) AND height = ?", to, to, i).Find(&info).Count(&count)
+	cli.db.Where("(\"to\" = ? or \"from\" = ?) AND height = ? and method = ? and cid=?", to, to, i, method, cid).Find(&info).Count(&count)
 	if count == 0 {
 		return nil, xerrors.Errorf("cannot find any value")
 	}
 
-	return info, nil
+	return &info, nil
 
 }
 

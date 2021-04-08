@@ -8,7 +8,8 @@ import (
 	"unsafe"
 )
 
-var httpUrl = "http://106.74.7.3:34569"
+//var httpUrl = "http://106.74.7.3:34569"
+var httpUrl = "http://127.0.0.1:1234/rpc/v0"
 
 //  find filecoin chain tipset
 func GetMinerInfoByMinerIdAndHeight(minerId string, height string) string {
@@ -101,6 +102,14 @@ func StateMinerSectorCount(minerId string, cid string) string {
 //  StateSectorPreCommitInfo 查看矿工的某个扇区在当前高度的preCommitDeposit
 func StateSectorPreCommitInfo(minerId string, sectorId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateSectorPreCommitInfo", "params": [` + "\"" + minerId + "\"," + sectorId + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
+	reader := bytes.NewReader([]byte(json))
+	return funcHttp(httpUrl, reader)
+}
+
+// StateReplay messageId
+func StateReplay(cid string, messageId string) string {
+
+	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateReplay", "params": [[{"/":` + "\"" + cid + "\"" + `}],{"/":` + "\"" + messageId + "\"" + `}], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
