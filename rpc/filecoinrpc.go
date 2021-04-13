@@ -8,9 +8,9 @@ import (
 	"unsafe"
 )
 
-var httpUrl = "http://106.74.7.3:34569"
+//var httpUrl = "http://106.74.7.3:34569"
 
-//var httpUrl = "http://127.0.0.1:1234/rpc/v0"
+var httpUrl = "http://127.0.0.1:1234/rpc/v0"
 
 //  find filecoin chain tipset
 func GetMinerInfoByMinerIdAndHeight(minerId string, height string) string {

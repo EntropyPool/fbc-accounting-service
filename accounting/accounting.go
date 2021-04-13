@@ -163,7 +163,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	var lockedFunds interface{}
 	var initialPledge interface{}
 	var minerBalance interface{}
-	SubLockFunds := "0"
+	totalSubLockFunds := "0"
 
 	for i := realStartHeight; i <= realEndHeight; i++ {
 		// 统计fee minertip totalvalue
@@ -234,7 +234,6 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					}
 					// miner withdrawBalance
 					if derivedGasOutputs[j].Method == 16 {
-						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----derivedGasOutputs[j].Cid-------------------------:" + derivedGasOutputs[j].Cid + "\n")
 						stateReplayResult := filrpc.StateReplay(cidStr, derivedGasOutputs[j].Cid)
 						if stateReplayResult != "" {
 							var stateReadStateMap map[string]interface{}
@@ -243,7 +242,6 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, withdrawBalance.(string))
 							}
 						}
-						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----totalWithdrawBalance-------------------------:" + totalWithdrawBalance + "\n")
 					}
 				}
 			}
@@ -303,24 +301,84 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					infos[k-2].BlockReward = "0"
 				}
 
-				// 求某个高度 线性释放的金额  = （下一高度的可用余额-上一个高度可用余额）-(上一个高度的(pre + pro + InitialPledge + PreCommitDeposits + send) - 下一个高度的（PreCommitDeposits+InitialPledge）)
-				add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
-				add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
-				add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
-				add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
-				add2 = utils.BigIntAddStr(totalPreCommitSectorss, add2)
-				add2 = utils.BigIntAddStr(infos[k-2].MinerAvailableBalance, add2)
-				if !strings.EqualFold(infos[k-2].WithdrawBalance, "0") { // miner withdrawBalance
-					add2 = utils.BigIntReduceStr(add2, infos[k-2].WithdrawBalance)
+				// TODO 线性释放金额
+				// 求某个高度 线性释放的金额  = （下一高度的可用余额-上一个高度可用余额）+ withdrawBalance -(上一个高度的(pre + pro + InitialPledge + PreCommitDeposits + send) - 下一个高度的（PreCommitDeposits+InitialPledge）)
+				// 连续三个高度中间出现空块的情况
+				if k >= 3 {
+					if !infos[k-1].FlagBlockIsNull && infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
+						add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
+						add3 := utils.BigIntAddStr(infos[k-3].PreCommitDeposits, infos[k-3].InitialPledge)
+						add3 = utils.BigIntAddStr(add3, infos[k-3].Send)
+						// k3 totalPreCommitSector
+						totalPreCommitSector := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+						add3 = utils.BigIntAddStr(totalPreCommitSector, add3)
+						add3 = utils.BigIntAddStr(infos[k-3].MinerAvailableBalance, add3)
+						if !strings.EqualFold(infos[k-3].WithdrawBalance, "0") { // miner withdrawBalance
+							add3 = utils.BigIntReduceStr(add3, infos[k-3].WithdrawBalance)
+						}
+						subBlockRewardAvalible := utils.BigIntReduceStr(add1, add3)
+						TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+						// 连续三个高度不出现空块的情况
+					} else if !infos[k-1].FlagBlockIsNull && !infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						if k == 3 {
+							add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
+							add2 = utils.BigIntAddStr(add2, infos[k-2].MinerAvailableBalance)
+							add3 := utils.BigIntAddStr(infos[k-3].PreCommitDeposits, infos[k-3].InitialPledge)
+							add3 = utils.BigIntAddStr(add3, infos[k-3].Send)
+							totalPreCommitSector := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+							add3 = utils.BigIntAddStr(totalPreCommitSector, add3)
+							add3 = utils.BigIntAddStr(infos[k-3].MinerAvailableBalance, add3)
+							if !strings.EqualFold(infos[k-3].WithdrawBalance, "0") { // miner withdrawBalance
+								add3 = utils.BigIntReduceStr(add3, infos[k-3].WithdrawBalance)
+							}
+							subBlockRewardAvalible := utils.BigIntReduceStr(add2, add3)
+							TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+						} else {
+							add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
+							add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
+							add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
+							add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
+							add2 = utils.BigIntAddStr(totalPreCommitSectorss, add2)
+							add2 = utils.BigIntAddStr(infos[k-2].MinerAvailableBalance, add2)
+							if !strings.EqualFold(infos[k-2].WithdrawBalance, "0") { // miner withdrawBalance
+								add2 = utils.BigIntReduceStr(add2, infos[k-2].WithdrawBalance)
+							}
+							subBlockRewardAvalible := utils.BigIntReduceStr(add1, add2)
+							TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+						}
+					}
 				}
-				subBlockRewardAvalible := utils.BigIntReduceStr(add1, add2)
-				TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
 
-				subLockFunds := utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
-				if strings.Contains(subLockFunds, "-") {
-					SubLockFunds = utils.BigIntReduceStr(SubLockFunds, subLockFunds)
-				} else {
-					SubLockFunds = utils.BigIntAddStr(subLockFunds, SubLockFunds)
+				// TODO lockFunds
+				subLockFunds := "0"
+				if k >= 3 {
+					// 中间出现空块
+					if !infos[k-1].FlagBlockIsNull && infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						subLockFunds = utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-3].LockedFunds)
+						if !strings.Contains(subLockFunds, "-") {
+							totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+						}
+						// 连续不出现空块
+					} else if !infos[k-1].FlagBlockIsNull && !infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						if k == 3 {
+							subLockFunds = utils.BigIntReduceStr(infos[k-2].LockedFunds, infos[k-3].LockedFunds)
+							if !strings.Contains(subLockFunds, "-") {
+								totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+							}
+							subLockFunds = utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
+							if !strings.Contains(subLockFunds, "-") {
+								totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+							}
+						} else {
+							subLockFunds = utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
+							if !strings.Contains(subLockFunds, "-") {
+								totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+							}
+						}
+
+					}
+
 				}
 
 				// TODO 惩罚
@@ -332,13 +390,12 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					if !strings.EqualFold(infos[k-2].TAG, "block is null") {
 						infos[k-2].TAG = "惩罚(销毁)"
 						infos[k-2].PunishFee = utils.BigIntReduceStr(addBalance, subBalance)
-						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---totalWithdrawBalance0-------:" + infos[k-2].WithdrawBalance + "\n")
 						if !strings.EqualFold(infos[k-2].WithdrawBalance, "0") { // 去掉提现的部分
-							fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---totalWithdrawBalance-------:" + infos[k-2].WithdrawBalance + "\n")
+							//fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---totalWithdrawBalance-------:" + infos[k-2].WithdrawBalance + "\n")
 							infos[k-2].PunishFee = utils.BigIntReduceStr(infos[k-2].PunishFee, infos[k-2].WithdrawBalance)
 						}
 						totalPunishFees = utils.BigIntAddStr(totalPunishFees, infos[k-2].PunishFee)
-						fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---burn-PunishFee-------:" + infos[k-2].PunishFee + "---totalPunishFees:" + totalPunishFees + "\n")
+						//fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---burn-PunishFee-------:" + infos[k-2].PunishFee + "---totalPunishFees:" + totalPunishFees + "\n")
 					} else {
 						// 将空块 误认为是惩罚的 减掉
 						totalPunishFees = utils.BigIntReduceStr(totalPunishFees, infos[k-3].PunishFee)
@@ -354,7 +411,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					//} else {
 					//	totalPunishFees = utils.BigIntReduceStr(totalPunishFees, subLockFunds)
 					//}
-					//fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---lockFunds不相等 :" + subLockFunds + "\n")
+					fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "---lockFunds不相等 :" + subLockFunds + "\n")
 				}
 
 			}
@@ -362,7 +419,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		}
 	}
 	// SubLockFunds 含有 PunishFee
-	Total := utils.BigIntAddStr(TotalTodayRewards, SubLockFunds)
+	Total := utils.BigIntAddStr(TotalTodayRewards, totalSubLockFunds)
 	// 除了正常出块，剩下的为线性释放
 	Today180PercentRewards := utils.BigIntReduceStr(Total, TodayBlockRewards)
 
@@ -375,7 +432,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	DailyRewardInfos.Today25PercentRewards = Today25PercentRewards
 	DailyRewardInfos.Today180PercentRewards = Today180PercentRewards
 	DailyRewardInfos.MinerPower = MinerPower.(string)
-	fmt.Println("result: \n TodayBlockRewards:", TodayBlockRewards, "---", "SubLockFunds:", SubLockFunds, "---", "TotalTodayRewards:", TotalTodayRewards, "---",
+	fmt.Println("result: \n TodayBlockRewards:", TodayBlockRewards, "---", "totalSubLockFunds:", totalSubLockFunds, "---", "TotalTodayRewards:", TotalTodayRewards, "---",
 		"PunishFee:", totalPunishFees, "---", "Today180PercentRewards:", Today180PercentRewards)
 	return DailyRewardInfos, "", 0
 }
@@ -773,6 +830,7 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 		rsCount := realEndHeight - realStartHeight
 		res = utils.Paginator(currentPage, pageSize, rsCount)
 		realEndHeight = realStartHeight + int64(currentPage)*int64(pageSize)
+		realStartHeight = realStartHeight + (int64(currentPage)-1)*int64(pageSize)
 	}
 
 	var infos []types.AccountInfo
@@ -838,6 +896,7 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 		rsCount := realEndHeight - realStartHeight
 		res = utils.Paginator(currentPage, pageSize, rsCount)
 		realEndHeight = realStartHeight + int64(currentPage)*int64(pageSize)
+		realStartHeight = realStartHeight + (int64(currentPage)-1)*int64(pageSize)
 	}
 
 	var infos []types.WorkerInfo
@@ -939,6 +998,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 		rsCount := realEndHeight - realStartHeight
 		res = utils.Paginator(currentPage, pageSize, rsCount)
 		realEndHeight = realStartHeight + int64(currentPage)*int64(pageSize)
+		realStartHeight = realStartHeight + (int64(currentPage)-1)*int64(pageSize)
 	}
 
 	var infos []types.MinerInfo
@@ -947,7 +1007,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	var lockedFunds interface{}
 	var initialPledge interface{}
 	var minerBalance interface{}
-	SubLockFunds := "0"
+	totalSubLockFunds := "0"
 
 	for i := realStartHeight; i <= realEndHeight; i++ {
 		// 统计fee minertip totalvalue
@@ -1081,26 +1141,88 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					infos[k-2].BlockReward = "0"
 				}
 
-				// TODO 线性释放的金额
-				add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
-				add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
-				add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
-				add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
-				add2 = utils.BigIntAddStr(totalPreCommitSectors, add2)
-				add2 = utils.BigIntAddStr(infos[k-2].MinerAvailableBalance, add2)
-				// 线性释放的金额
-				subBlockRewardAvalible := utils.BigIntReduceStr(add1, add2)
-				TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
-				// LockFunds 相减
-				subLockFunds := utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
-				if strings.Contains(subLockFunds, "-") {
-					SubLockFunds = utils.BigIntReduceStr(subLockFunds, SubLockFunds)
-				} else {
-					SubLockFunds = utils.BigIntAddStr(subLockFunds, SubLockFunds)
+				// TODO 线性释放金额
+				// 求某个高度 线性释放的金额  = （下一高度的可用余额-上一个高度可用余额）+ withdrawBalance -(上一个高度的(pre + pro + InitialPledge + PreCommitDeposits + send) - 下一个高度的（PreCommitDeposits+InitialPledge）)
+				// 连续三个高度中间出现空块的情况
+				if k >= 3 {
+					if !infos[k-1].FlagBlockIsNull && infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
+						add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
+						add3 := utils.BigIntAddStr(infos[k-3].PreCommitDeposits, infos[k-3].InitialPledge)
+						add3 = utils.BigIntAddStr(add3, infos[k-3].Send)
+						// k3 totalPreCommitSector
+						totalPreCommitSector := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+						add3 = utils.BigIntAddStr(totalPreCommitSector, add3)
+						add3 = utils.BigIntAddStr(infos[k-3].MinerAvailableBalance, add3)
+						if !strings.EqualFold(infos[k-3].WithdrawBalance, "0") { // miner withdrawBalance
+							add3 = utils.BigIntReduceStr(add3, infos[k-3].WithdrawBalance)
+						}
+						subBlockRewardAvalible := utils.BigIntReduceStr(add1, add3)
+						TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+						// 连续三个高度不出现空块的情况
+					} else if !infos[k-1].FlagBlockIsNull && !infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						if k == 3 {
+							add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
+							add2 = utils.BigIntAddStr(add2, infos[k-2].MinerAvailableBalance)
+							add3 := utils.BigIntAddStr(infos[k-3].PreCommitDeposits, infos[k-3].InitialPledge)
+							add3 = utils.BigIntAddStr(add3, infos[k-3].Send)
+							totalPreCommitSector := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+							add3 = utils.BigIntAddStr(totalPreCommitSector, add3)
+							add3 = utils.BigIntAddStr(infos[k-3].MinerAvailableBalance, add3)
+							if !strings.EqualFold(infos[k-3].WithdrawBalance, "0") { // miner withdrawBalance
+								add3 = utils.BigIntReduceStr(add3, infos[k-3].WithdrawBalance)
+							}
+							subBlockRewardAvalible := utils.BigIntReduceStr(add2, add3)
+							TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+						} else {
+							add1 := utils.BigIntAddStr(infos[k-1].PreCommitDeposits, infos[k-1].InitialPledge)
+							add1 = utils.BigIntAddStr(add1, infos[k-1].MinerAvailableBalance)
+							add2 := utils.BigIntAddStr(infos[k-2].PreCommitDeposits, infos[k-2].InitialPledge)
+							add2 = utils.BigIntAddStr(add2, infos[k-2].Send)
+							add2 = utils.BigIntAddStr(totalPreCommitSectors, add2)
+							add2 = utils.BigIntAddStr(infos[k-2].MinerAvailableBalance, add2)
+							if !strings.EqualFold(infos[k-2].WithdrawBalance, "0") { // miner withdrawBalance
+								add2 = utils.BigIntReduceStr(add2, infos[k-2].WithdrawBalance)
+							}
+							subBlockRewardAvalible := utils.BigIntReduceStr(add1, add2)
+							TotalTodayRewards = utils.BigIntAddStr(subBlockRewardAvalible, TotalTodayRewards)
+						}
+					}
+				}
+
+				// TODO lockFunds
+				subLockFunds := "0"
+				if k >= 3 {
+					// 中间出现空块
+					if !infos[k-1].FlagBlockIsNull && infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						subLockFunds = utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-3].LockedFunds)
+						if !strings.Contains(subLockFunds, "-") {
+							totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+						}
+						// 连续不出现空块
+					} else if !infos[k-1].FlagBlockIsNull && !infos[k-2].FlagBlockIsNull && !infos[k-3].FlagBlockIsNull {
+						if k == 3 {
+							subLockFunds = utils.BigIntReduceStr(infos[k-2].LockedFunds, infos[k-3].LockedFunds)
+							if !strings.Contains(subLockFunds, "-") {
+								totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+							}
+							subLockFunds = utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
+							if !strings.Contains(subLockFunds, "-") {
+								totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+							}
+						} else {
+							subLockFunds = utils.BigIntReduceStr(infos[k-1].LockedFunds, infos[k-2].LockedFunds)
+							if !strings.Contains(subLockFunds, "-") {
+								totalSubLockFunds = utils.BigIntAddStr(subLockFunds, totalSubLockFunds)
+							}
+						}
+
+					}
+
 				}
 				infos[k-2].SubLockFunds = subLockFunds
 
-				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--TotalTodayRewards:" + TotalTodayRewards + "SubLockFunds:" + SubLockFunds + "\n")
+				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--TotalTodayRewards:" + TotalTodayRewards + "totalSubLockFunds:" + totalSubLockFunds + "\n")
 
 				// TODO 惩罚
 				addBalance := utils.BigIntAddStr(totalPreCommitSectors, infos[k-2].BlockReward)
