@@ -281,15 +281,15 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					infos[k-2].BlockReward = utils.BigIntAddStr(infos[k-2].BlockReward, infos[k-2].WithdrawBalance)
 					// 特殊情况 : 下一个高度是空块 作差也会大于0 因为空块余额不变化，而且没将上一个高度的pre 和pro 加进来
 					// 特殊情况： 下一个高度是空块，而此时出块了，此时计算到出块的奖励应该给到 infos[k-3].blockReward
-					//k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
-					//var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
+					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
 					//// TODO block is null
 					//if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
 					//	infos[k-2].BlockReward = "0"
 					//	infos[k-2].TAG = "block is null"
 					//}
 					// block is null
-					if infos[k-2].FlagBlockIsNull {
+					if infos[k-2].FlagBlockIsNull && strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
 						infos[k-3].BlockReward = infos[k-2].BlockReward //将值赋给上一层
 						infos[k-2].BlockReward = "0"
 						infos[k-2].TAG = "block is null"
@@ -713,6 +713,10 @@ func (s *AccountingServer) GetAccountInfoRequest(writer http.ResponseWriter, req
 	endHeightInt64 := atomic.AddInt64(&endTimestamp, -1598306400)
 	realEndHeight := endHeightInt64 / 30
 	fmt.Printf("account: %s,realStartHeight: %s,realEndHeight: %s", account, realStartHeight, realEndHeight)
+	pageSizeStr := string(query["pageSize"][0]) // 分页大小
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	currentPageStr := string(query["currentPage"][0]) // 当前第几页
+	currentPage, _ := strconv.Atoi(currentPageStr)
 
 	var accountType = ""
 	if strings.HasPrefix(account, "f1") {
@@ -748,22 +752,29 @@ func (s *AccountingServer) GetAccountInfoRequest(writer http.ResponseWriter, req
 
 	if strings.EqualFold(accountType, "normal") {
 
-		infos := s.findAccountInfoByAccountAndBlockNo(account, realStartHeight, realEndHeight)
+		infos := s.findAccountInfoByAccountAndBlockNo(account, realStartHeight, realEndHeight, pageSize, currentPage)
 		return infos, "", 0
 
 	} else if strings.EqualFold(accountType, "worker") {
-		infos := s.findWorkerInfoByAccountAndBlockNo(account, realStartHeight, realEndHeight)
+		infos := s.findWorkerInfoByAccountAndBlockNo(account, realStartHeight, realEndHeight, pageSize, currentPage)
 		return infos, "", 0
 
 	} else if strings.EqualFold(accountType, "miner") {
-		infos := s.findMinerInfoByAccountAndBlockNo(account, realStartHeight, realEndHeight)
+		infos := s.findMinerInfoByAccountAndBlockNo(account, realStartHeight, realEndHeight, pageSize, currentPage)
 		return infos, "", 0
 	}
 	return nil, "not found anything", 0
 }
 
 // normal account
-func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.AccountInfo {
+func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64, pageSize int, currentPage int) map[string]interface{} {
+	res := make(map[string]interface{})
+	if pageSize != 0 && pageSize != 0 {
+		rsCount := realEndHeight - realStartHeight
+		res = utils.Paginator(currentPage, pageSize, rsCount)
+		realEndHeight = realStartHeight + int64(currentPage)*int64(pageSize)
+	}
+
 	var infos []types.AccountInfo
 	var accountBalance interface{}
 	for i := realStartHeight; i < realEndHeight; i++ {
@@ -814,41 +825,20 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 			infos[i].SendOut = totalSendOut
 		}
 	}
-	return infos
+	res["data"] = infos
+	return res
 }
 
 // worker
-func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.WorkerInfo {
+func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64, pageSize int, currentPage int) map[string]interface{} {
 
 	t := time.Now()
-	//var file *xlsx.File
-	//var sheet *xlsx.Sheet
-	//var row *xlsx.Row
-	//var cell *xlsx.Cell
-	//file = xlsx.NewFile()
-	//sheet, _ = file.AddSheet("Sheet1")
-	//row = sheet.AddRow()
-	//// add title
-	//cell = row.AddCell()
-	//cell.Value = "Id"
-	//cell = row.AddCell()
-	//cell.Value = "Balance"
-	//cell = row.AddCell()
-	//cell.Value = "BlockHeight"
-	//cell = row.AddCell()
-	//cell.Value = "Fee"
-	//cell = row.AddCell()
-	//cell.Value = "MinerTip"
-	//cell = row.AddCell()
-	//cell.Value = "SendIn"
-	//cell = row.AddCell()
-	//cell.Value = "SendOut"
-	//cell = row.AddCell()
-	//cell.Value = "Send"
-	//cell = row.AddCell()
-	//cell.Value = "PreCommitSectors"
-	//cell = row.AddCell()
-	//cell.Value = "ProveCommitSectors"
+	res := make(map[string]interface{})
+	if pageSize != 0 && pageSize != 0 {
+		rsCount := realEndHeight - realStartHeight
+		res = utils.Paginator(currentPage, pageSize, rsCount)
+		realEndHeight = realStartHeight + int64(currentPage)*int64(pageSize)
+	}
 
 	var infos []types.WorkerInfo
 	var workerBalance interface{}
@@ -910,30 +900,6 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 			info.PreCommitSectors = totalPreCommitSectors
 			info.ProveCommitSectors = totalProveCommitSectors
 			infos = append(infos, info)
-
-			//row = sheet.AddRow()
-			//// add title
-			//cell = row.AddCell()
-			//cell.Value = info.Id
-			//cell = row.AddCell()
-			//cell.Value = info.Balance
-			//cell = row.AddCell()
-			//cell.Value = strconv.FormatInt(info.BlockHeight, 10)
-			//cell = row.AddCell()
-			//cell.Value = info.Fee
-			//cell = row.AddCell()
-			//cell.Value = info.MinerTip
-			//cell = row.AddCell()
-			//cell.Value = info.SendIn
-			//cell = row.AddCell()
-			//cell.Value = info.SendOut
-			//cell = row.AddCell()
-			//cell.Value = info.Send
-			//cell = row.AddCell()
-			//cell.Value = info.PreCommitSectors
-			//cell = row.AddCell()
-			//cell.Value = info.ProveCommitSectors
-			//file.Save("filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + "worker.xlsx")
 		}
 	}
 	f, err := os.Create("./" + account + "filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + ".csv")
@@ -951,15 +917,29 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 			infos[i].Send + "\t", infos[i].PreCommitSectors + "\t", infos[i].ProveCommitSectors + "\t"})
 	}
 	w.Flush()
+	res["data"] = infos
 	spendtime := time.Since(t)
 	fmt.Println("spend time:", spendtime)
-	return infos
+	return res
 }
 
 // miner
-func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64) []types.MinerInfo {
+func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, realStartHeight int64, realEndHeight int64, pageSize int, currentPage int) map[string]interface{} {
 
 	t := time.Now()
+
+	if pageSize < 0 {
+		pageSize = 20
+	}
+	if currentPage < 0 {
+		currentPage = 1
+	}
+	res := make(map[string]interface{})
+	if pageSize != 0 && pageSize != 0 {
+		rsCount := realEndHeight - realStartHeight
+		res = utils.Paginator(currentPage, pageSize, rsCount)
+		realEndHeight = realStartHeight + int64(currentPage)*int64(pageSize)
+	}
 
 	var infos []types.MinerInfo
 	var minerAvailableBalance interface{}
@@ -968,6 +948,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 	var initialPledge interface{}
 	var minerBalance interface{}
 	SubLockFunds := "0"
+
 	for i := realStartHeight; i <= realEndHeight; i++ {
 		// 统计fee minertip totalvalue
 		// table derived_gas_outputs
@@ -1083,15 +1064,14 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				if blockReward > 0 {
 					infos[k-2].BlockReward = utils.BigIntReduceStr(infos[k-2].BlockReward, infos[k-2].Send)
 					infos[k-2].BlockReward = utils.BigIntAddStr(infos[k-2].BlockReward, infos[k-2].WithdrawBalance)
-
-					//k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
-					//var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
-					//// TODO block is null
+					k3totalPreCommitSectors := utils.BigIntAddStr(infos[k-3].PreCommitSectors, infos[k-3].ProveCommitSectors)
+					var p = utils.BigIntReduceStr(infos[k-2].BlockReward, k3totalPreCommitSectors)
+					// TODO block is null
 					//if strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
 					//	infos[k-2].BlockReward = "0"
 					//	infos[k-2].TAG = "block is null"
 					//}
-					if infos[k-2].FlagBlockIsNull {
+					if infos[k-2].FlagBlockIsNull && strings.EqualFold(p, "0") && !strings.EqualFold(k3totalPreCommitSectors, "0") {
 						infos[k-3].BlockReward = infos[k-2].BlockReward //将值赋值给上一层
 						infos[k-2].BlockReward = "0"
 						infos[k-2].TAG = "block is null"
@@ -1120,7 +1100,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 				}
 				infos[k-2].SubLockFunds = subLockFunds
 
-				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--Total25PercentRewards:" + TotalTodayRewards + "SubLockFunds:" + SubLockFunds + "\n")
+				fmt.Printf("--blockNo:" + strconv.FormatInt(i, 10) + "--TotalTodayRewards:" + TotalTodayRewards + "SubLockFunds:" + SubLockFunds + "\n")
 
 				// TODO 惩罚
 				addBalance := utils.BigIntAddStr(totalPreCommitSectors, infos[k-2].BlockReward)
@@ -1149,6 +1129,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 
 		}
 	}
+
 	f, err := os.Create("./" + account + "filecoin-" + strconv.FormatInt(realStartHeight, 10) + "-" + strconv.FormatInt(realEndHeight, 10) + ".csv")
 	if err != nil {
 		panic(err)
@@ -1168,8 +1149,9 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			infos[i].SubLockFunds + "\t", infos[i].WithdrawBalance + "\t"})
 	}
 	w.Flush()
+	res["data"] = infos
 	spendtime := time.Since(t)
 	fmt.Println("spend time:", spendtime)
-	return infos
+	return res
 
 }
