@@ -1080,7 +1080,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					}
 					// miner withdrawBalance
 					if derivedGasOutputs[j].Method == 16 {
-						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----derivedGasOutputs[j].Cid-------------------------:" + derivedGasOutputs[j].Cid + "\n")
+
 						stateReplayResult := filrpc.StateReplay(cidStr, derivedGasOutputs[j].Cid)
 						if stateReplayResult != "" {
 							var stateReadStateMap map[string]interface{}
@@ -1089,7 +1089,6 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 								totalWithdrawBalance = utils.BigIntAddStr(totalWithdrawBalance, withdrawBalance.(string))
 							}
 						}
-						fmt.Printf("----blockNo:" + strconv.FormatInt(i, 10) + " ----totalWithdrawBalance-------------------------:" + totalWithdrawBalance + "\n")
 					}
 				}
 			}
