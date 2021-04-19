@@ -107,3 +107,12 @@ type DailyMinerInfoAvailable struct {
 	PunishFee              string `gorm:"column:PunishFee"`             // 惩罚
 	MinerPower             string `gorm:"column:MinerPower"`            // 矿工算力
 }
+
+// ServiceRegisterInput
+type ServiceRegisterInput struct {
+	UserName   string `json:"UserName"`
+	Password   string `json:"password"`
+	DomainName string `json:"DomainName"`
+	IP         string `json:"IP"`
+	Port       string `json:"Port"`
+}
