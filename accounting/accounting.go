@@ -75,7 +75,7 @@ func NewAccountingServer(configFile string) *AccountingServer {
 		Post(fmt.Sprintf("http://%v%v", host, types.GetRegisterEtcdAPI))
 	if err != nil {
 		log.Errorf(log.Fields{}, "heartbeat error: %v", err)
-		return nil
+		//return nil
 	} else {
 		if resp.StatusCode() != 200 {
 			fmt.Println("NON-200 return")
@@ -93,13 +93,7 @@ func NewAccountingServer(configFile string) *AccountingServer {
 }
 
 func (s *AccountingServer) Run() error {
-	httpdaemon.RegisterRouter(httpdaemon.HttpRouter{
-		Location: types.GetMinerPledgeAPI,
-		Method:   "GET",
-		Handler: func(w http.ResponseWriter, req *http.Request) (interface{}, string, int) {
-			return s.GetMinerPledgeRequest(w, req)
-		},
-	})
+
 	httpdaemon.RegisterRouter(httpdaemon.HttpRouter{
 		Location: types.GetMinerPledgeAPI,
 		Method:   "GET",
