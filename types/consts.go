@@ -14,7 +14,7 @@ const (
 	GetAccountInfoAPI = "/api/v0/account/info"
 	/****************** API end *********************/
 	/****************** config start *********************/
-	AccountingDomain = "accounting.npool.top1"
+	AccountingDomain = "accounting.npool.top"
 
 	RegisterDomain = "127.0.0.1"
 	RegisterPort   = "7101"
