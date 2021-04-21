@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/EntropyPool/entropy-logger"
+	"github.com/EntropyPool/fbc-accounting-service/basenode"
 	fbcpostgres "github.com/EntropyPool/fbc-accounting-service/postgres"
 	filrpc "github.com/EntropyPool/fbc-accounting-service/rpc"
 	types "github.com/EntropyPool/fbc-accounting-service/types"
@@ -60,10 +61,19 @@ func NewAccountingServer(configFile string) *AccountingServer {
 	}
 
 	log.Infof(log.Fields{}, "successful to create devops server")
+
+	_, address, err := basenode.GetAddress()
+	if err == nil {
+		fmt.Println("IP address:" + address)
+	} else {
+		fmt.Println("getAddress IP err:", err.Error())
+	}
+
 	serverRegisterInput := types.ServiceRegisterInput{
 		UserName:   types.UserName,
 		Password:   types.Password,
 		DomainName: types.AccountingDomain,
+		IP:         address,
 		Port:       strconv.Itoa(config.Port),
 	}
 	//host := types.RegisterDomain
