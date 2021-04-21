@@ -76,13 +76,13 @@ func NewAccountingServer(configFile string) *AccountingServer {
 		IP:         address,
 		Port:       strconv.Itoa(config.Port),
 	}
-	//host := types.RegisterDomain
-	host := types.RegisterDomain + ":" + types.RegisterPort
+	host := types.RegisterDomain
+	//host := types.RegisterDomain + ":" + types.RegisterPort
 	resp, err := httpdaemon.R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(serverRegisterInput).
-		//Post(fmt.Sprintf("https://%v%v", host, types.GetRegisterEtcdAPI))
-		Post(fmt.Sprintf("http://%v%v", host, types.GetRegisterEtcdAPI))
+		Post(fmt.Sprintf("https://%v%v", host, types.GetRegisterEtcdAPI))
+		//Post(fmt.Sprintf("http://%v%v", host, types.GetRegisterEtcdAPI))
 	if err != nil {
 		log.Errorf(log.Fields{}, "heartbeat error: %v", err)
 		//return nil
