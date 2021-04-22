@@ -2,6 +2,7 @@ package main
 
 import (
 	log "github.com/EntropyPool/entropy-logger"
+	"github.com/EntropyPool/fbc-accounting-service/accounting"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 	"os"
@@ -21,7 +22,7 @@ func main() {
 		},
 		Action: func(cctx *cli.Context) error {
 			configFile := cctx.String("config")
-			server := NewAccountingServer(configFile)
+			server := accounting.NewAccountingServer(configFile)
 			if server == nil {
 				return xerrors.Errorf("cannot create devops server")
 			}
