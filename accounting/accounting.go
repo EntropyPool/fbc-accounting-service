@@ -64,7 +64,7 @@ func NewAccountingServer(configFile string) *AccountingServer {
 
 	_, address, err := basenode.GetAddress()
 	if err == nil {
-		fmt.Println("IP address:" + address)
+		fmt.Println("public IP :" + address)
 	} else {
 		fmt.Println("getAddress IP err:", err.Error())
 	}
@@ -73,7 +73,7 @@ func NewAccountingServer(configFile string) *AccountingServer {
 		UserName:   types.UserName,
 		Password:   types.Password,
 		DomainName: types.AccountingDomain,
-		IP:         address,
+		PublicIP:   address,
 		Port:       strconv.Itoa(config.Port),
 	}
 	host := types.RegisterDomain
