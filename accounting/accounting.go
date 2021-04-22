@@ -26,6 +26,7 @@ import (
 type AccountingConfig struct {
 	PostgresConfig fbcpostgres.PostgresConfig `json:"postgres"`
 	Port           int
+	IP             string
 }
 
 type AccountingServer struct {
@@ -69,11 +70,13 @@ func NewAccountingServer(configFile string) *AccountingServer {
 		fmt.Println("getAddress IP err:", err.Error())
 	}
 
+	fmt.Println("config.IP :" + config.IP)
+
 	serverRegisterInput := types.ServiceRegisterInput{
 		UserName:   types.UserName,
 		Password:   types.Password,
 		DomainName: types.AccountingDomain,
-		PublicIP:   address,
+		IP:         config.IP,
 		Port:       strconv.Itoa(config.Port),
 	}
 	host := types.RegisterDomain
