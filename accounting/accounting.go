@@ -26,6 +26,8 @@ import (
 type AccountingConfig struct {
 	PostgresConfig fbcpostgres.PostgresConfig `json:"postgres"`
 	Port           int
+	Ip             string
+	Rpc            string
 }
 
 type AccountingServer struct {
@@ -64,16 +66,18 @@ func NewAccountingServer(configFile string) *AccountingServer {
 
 	_, address, err := basenode.GetAddress()
 	if err == nil {
-		fmt.Println("IP address:" + address)
+		fmt.Println("public IP :" + address)
 	} else {
 		fmt.Println("getAddress IP err:", err.Error())
 	}
+
+	fmt.Println("config.IP :" + config.Ip)
 
 	serverRegisterInput := types.ServiceRegisterInput{
 		UserName:   types.UserName,
 		Password:   types.Password,
 		DomainName: types.AccountingDomain,
-		IP:         address,
+		IP:         config.Ip,
 		Port:       strconv.Itoa(config.Port),
 	}
 	host := types.RegisterDomain
@@ -85,7 +89,7 @@ func NewAccountingServer(configFile string) *AccountingServer {
 		//Post(fmt.Sprintf("http://%v%v", host, types.GetRegisterEtcdAPI))
 	if err != nil {
 		log.Errorf(log.Fields{}, "heartbeat error: %v", err)
-		//return nil
+		return nil
 	} else {
 		if resp.StatusCode() != 200 {
 			fmt.Println("NON-200 return")
@@ -145,7 +149,7 @@ func (s *AccountingServer) GetMinerPledgeRequest(w http.ResponseWriter, req *htt
 	query := req.URL.Query()
 	account := string(query["account"][0])
 	//minerPreCommitInfo, _ := s.PostgresClient.QueryMinerPreCommitInfo(minerId)
-	result := filrpc.ChainHead()
+	result := filrpc.ChainHead(s.config.Rpc)
 	var totalInitialPledge interface{}
 	var initialPledge interface{}
 	var preCommitDeposits interface{}
@@ -153,7 +157,7 @@ func (s *AccountingServer) GetMinerPledgeRequest(w http.ResponseWriter, req *htt
 	if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 		cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 		cidStr := cid.(string)
-		stateReadStateResult := filrpc.StateReadState(account, cidStr)
+		stateReadStateResult := filrpc.StateReadState(s.config.Rpc, account, cidStr)
 		var stateReadStateMap map[string]interface{}
 		if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 			initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
@@ -190,7 +194,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 	Today25PercentRewards := "0"
 	TotalTodayRewards := "0"
 	var MinerPower interface{}
-	stateMinerPowerResult := filrpc.StateMinerPower(account, "", false)
+	stateMinerPowerResult := filrpc.StateMinerPower(s.config.Rpc, account, "", false)
 	var stateMinerPowerMap map[string]interface{}
 	if err := json.Unmarshal([]byte(stateMinerPowerResult), &stateMinerPowerMap); err == nil {
 		MinerPower = stateMinerPowerMap["result"].(map[string]interface{})["MinerPower"].(map[string]interface{})["RawBytePower"]
@@ -209,7 +213,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 		// table derived_gas_outputs
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(s.config.Rpc, account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			reallyBlockNo := resultMap["result"].(map[string]interface{})["Height"]
@@ -220,15 +224,15 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 			}
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(s.config.Rpc, account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
-				minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(account, cidStr)
+				minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(s.config.Rpc, account, cidStr)
 				var minerAvailableBalanceMap map[string]interface{}
 				if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
 					minerAvailableBalance = minerAvailableBalanceMap["result"]
 
-					stateReadStateResult := filrpc.StateReadState(account, cidStr)
+					stateReadStateResult := filrpc.StateReadState(s.config.Rpc, account, cidStr)
 					var stateReadStateMap map[string]interface{}
 					if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 						preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
@@ -273,7 +277,7 @@ func (s *AccountingServer) GetMinerDailyRewardRequest(writer http.ResponseWriter
 					}
 					// miner withdrawBalance
 					if derivedGasOutputs[j].Method == 16 {
-						stateReplayResult := filrpc.StateReplay(cidStr, derivedGasOutputs[j].Cid)
+						stateReplayResult := filrpc.StateReplay(s.config.Rpc, cidStr, derivedGasOutputs[j].Cid)
 						if stateReplayResult != "" {
 							var stateReadStateMap map[string]interface{}
 							if err := json.Unmarshal([]byte(stateReplayResult), &stateReadStateMap); err == nil {
@@ -562,7 +566,7 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 	for i := realStartHeight; i < realEndHeight; i++ {
 
 		iStr := strconv.FormatInt(i, 10)
-		result := filrpc.GetMinerInfoByMinerIdAndHeight(minerId, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(s.config.Rpc, minerId, iStr)
 		var resultMap map[string]interface{}
 		var minerAvailableBalance interface{}
 		var preCommitDeposits interface{}
@@ -574,12 +578,12 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr = cid.(string)
-			minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(minerId, cidStr)
+			minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(s.config.Rpc, minerId, cidStr)
 			var minerAvailableBalanceMap map[string]interface{}
 			if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
 				minerAvailableBalance = minerAvailableBalanceMap["result"]
 
-				stateReadStateResult := filrpc.StateReadState(minerId, cidStr)
+				stateReadStateResult := filrpc.StateReadState(s.config.Rpc, minerId, cidStr)
 				var stateReadStateMap map[string]interface{}
 				if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 					preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
@@ -587,17 +591,17 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 					initialPledge = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["InitialPledge"]
 				}
 				var stateGetActorMinerMap map[string]interface{}
-				stateGetActorMinerResult := filrpc.StateGetActor(minerId, cidStr)
+				stateGetActorMinerResult := filrpc.StateGetActor(s.config.Rpc, minerId, cidStr)
 				if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 					minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 				}
 				var stateMinerInfoMap map[string]interface{}
-				stateMinerInfoResult := filrpc.StateMinerInfo(minerId, cidStr)
+				stateMinerInfoResult := filrpc.StateMinerInfo(s.config.Rpc, minerId, cidStr)
 				if err := json.Unmarshal([]byte(stateMinerInfoResult), &stateMinerInfoMap); err == nil {
 					workerId := stateMinerInfoMap["result"].(map[string]interface{})["Worker"]
 					workerIdStr := workerId.(string)
 					var stateGetActorMap map[string]interface{}
-					stateGetActorResult := filrpc.StateGetActor(workerIdStr, cidStr)
+					stateGetActorResult := filrpc.StateGetActor(s.config.Rpc, workerIdStr, cidStr)
 					if err := json.Unmarshal([]byte(stateGetActorResult), &stateGetActorMap); err == nil {
 						balance = stateGetActorMap["result"].(map[string]interface{})["Balance"]
 					}
@@ -675,7 +679,7 @@ func (s *AccountingServer) GetMinerInfoRequest(w http.ResponseWriter, req *http.
 						if minerPreCommitInfo != nil {
 							minerInfo.PreCommitDeposit = minerPreCommitInfo.PreCommitDeposit
 						} else {
-							stateSectorPreCommitInfoResult := filrpc.StateSectorPreCommitInfo(minerId, strconv.Itoa(minerSectorInfos[j].SectorId), cidStr)
+							stateSectorPreCommitInfoResult := filrpc.StateSectorPreCommitInfo(s.config.Rpc, minerId, strconv.Itoa(minerSectorInfos[j].SectorId), cidStr)
 							var stateSectorPreCommitInfoMap map[string]interface{}
 							if err := json.Unmarshal([]byte(stateSectorPreCommitInfoResult), &stateSectorPreCommitInfoMap); err == nil {
 								minerInfo.PreCommitDeposit = stateSectorPreCommitInfoMap["result"].(map[string]interface{})["PreCommitDeposit"].(string)
@@ -821,12 +825,12 @@ func (s *AccountingServer) GetAccountInfoRequest(writer http.ResponseWriter, req
 		accountType = "worker" // worker address
 	} else if strings.HasPrefix(account, "f0") { // if begin f0 maybe miner id  or f1 f2 f3' address id
 		// check account
-		result := filrpc.ChainHead()
+		result := filrpc.ChainHead(s.config.Rpc)
 		var resultMap map[string]interface{}
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
-			resultLookupID := filrpc.StateLookupID(account, cidStr)
+			resultLookupID := filrpc.StateLookupID(s.config.Rpc, account, cidStr)
 			var resulLookupIDMap map[string]interface{}
 			json.Unmarshal([]byte(resultLookupID), &resulLookupIDMap)
 			resultId := resulLookupIDMap["result"]
@@ -878,12 +882,12 @@ func (s *AccountingServer) findAccountInfoByAccountAndBlockNo(account string, re
 		// 统计fee minertip totalvalue
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(s.config.Rpc, account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(s.config.Rpc, account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				accountBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 			}
@@ -945,12 +949,12 @@ func (s *AccountingServer) findWorkerInfoByAccountAndBlockNo(account string, rea
 
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(s.config.Rpc, account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(s.config.Rpc, account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				workerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
 			}
@@ -1053,7 +1057,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 		// table derived_gas_outputs
 		iStr := strconv.FormatInt(i, 10)
 		var resultMap map[string]interface{}
-		result := filrpc.GetMinerInfoByMinerIdAndHeight(account, iStr)
+		result := filrpc.GetMinerInfoByMinerIdAndHeight(s.config.Rpc, account, iStr)
 		if err := json.Unmarshal([]byte(result), &resultMap); err == nil {
 			cid := resultMap["result"].(map[string]interface{})["Cids"].([]interface{})[0].(map[string]interface{})["/"]
 			reallyBlockNo := resultMap["result"].(map[string]interface{})["Height"]
@@ -1064,15 +1068,15 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 			}
 			cidStr := cid.(string)
 			var stateGetActorMinerMap map[string]interface{}
-			stateGetActorMinerResult := filrpc.StateGetActor(account, cidStr)
+			stateGetActorMinerResult := filrpc.StateGetActor(s.config.Rpc, account, cidStr)
 			if err := json.Unmarshal([]byte(stateGetActorMinerResult), &stateGetActorMinerMap); err == nil {
 				minerBalance = stateGetActorMinerMap["result"].(map[string]interface{})["Balance"]
-				minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(account, cidStr)
+				minerAvailableBalanceResult := filrpc.StateMinerAvailableBalance(s.config.Rpc, account, cidStr)
 				var minerAvailableBalanceMap map[string]interface{}
 				if err := json.Unmarshal([]byte(minerAvailableBalanceResult), &minerAvailableBalanceMap); err == nil {
 					minerAvailableBalance = minerAvailableBalanceMap["result"]
 
-					stateReadStateResult := filrpc.StateReadState(account, cidStr)
+					stateReadStateResult := filrpc.StateReadState(s.config.Rpc, account, cidStr)
 					var stateReadStateMap map[string]interface{}
 					if err := json.Unmarshal([]byte(stateReadStateResult), &stateReadStateMap); err == nil {
 						preCommitDeposits = stateReadStateMap["result"].(map[string]interface{})["State"].(map[string]interface{})["PreCommitDeposits"]
@@ -1120,7 +1124,7 @@ func (s *AccountingServer) findMinerInfoByAccountAndBlockNo(account string, real
 					// miner withdrawBalance
 					if derivedGasOutputs[j].Method == 16 {
 
-						stateReplayResult := filrpc.StateReplay(cidStr, derivedGasOutputs[j].Cid)
+						stateReplayResult := filrpc.StateReplay(s.config.Rpc, cidStr, derivedGasOutputs[j].Cid)
 						if stateReplayResult != "" {
 							var stateReadStateMap map[string]interface{}
 							if err := json.Unmarshal([]byte(stateReplayResult), &stateReadStateMap); err == nil {

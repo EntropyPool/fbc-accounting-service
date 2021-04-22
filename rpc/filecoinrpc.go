@@ -10,59 +10,59 @@ import (
 
 //var httpUrl = "http://106.74.7.3:34569"
 
-var httpUrl = "http://127.0.0.1:1234/rpc/v0"
+//var httpUrl = "http://127.0.0.1:1234/rpc/v0"
 
 //  find filecoin chain tipset
-func GetMinerInfoByMinerIdAndHeight(minerId string, height string) string {
+func GetMinerInfoByMinerIdAndHeight(httpUrl string, minerId string, height string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.ChainGetTipSetByHeight", "params": [` + height + `,[]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 //  StateMinerAvailableBalance
-func StateMinerAvailableBalance(minerId string, cid string) string {
+func StateMinerAvailableBalance(httpUrl string, minerId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerAvailableBalance", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 //  StateReadState
-func StateReadState(minerId string, cid string) string {
+func StateReadState(httpUrl string, minerId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateReadState", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 // StateMinerInfo return worker
-func StateMinerInfo(minerId string, cid string) string {
+func StateMinerInfo(httpUrl string, minerId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerInfo", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 // StateGetActor  minerId or workerId  or normal id  to find balance at current blockNo
-func StateGetActor(minerId string, cid string) string {
+func StateGetActor(httpUrl string, minerId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateGetActor", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 // StateLookupID  根据高度反查ID
-func StateLookupID(account string, cid string) string {
+func StateLookupID(httpUrl string, account string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateLookupID", "params": [` + "\"" + account + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 // ChainHead  获取最新高度
-func ChainHead() string {
+func ChainHead(httpUrl string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.ChainHead", "params": [], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 // ChainHead  miner power
-func StateMinerPower(account string, cid string, flag bool) string {
+func StateMinerPower(httpUrl string, account string, cid string, flag bool) string {
 	json := ""
 	if flag {
 		json = `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerPower", "params": [` + "\"" + account + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
@@ -94,21 +94,21 @@ func funcHttp(httpUrl string, reader *bytes.Reader) string {
 }
 
 //  StateMinerSectorCount 查看矿工在当前高度的Faulty是否掉算力
-func StateMinerSectorCount(minerId string, cid string) string {
+func StateMinerSectorCount(httpUrl string, minerId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateMinerSectorCount", "params": [` + "\"" + minerId + "\"" + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 //  StateSectorPreCommitInfo 查看矿工的某个扇区在当前高度的preCommitDeposit
-func StateSectorPreCommitInfo(minerId string, sectorId string, cid string) string {
+func StateSectorPreCommitInfo(httpUrl string, minerId string, sectorId string, cid string) string {
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateSectorPreCommitInfo", "params": [` + "\"" + minerId + "\"," + sectorId + `,[{"/":` + "\"" + cid + "\"" + `}]], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))
 	return funcHttp(httpUrl, reader)
 }
 
 // StateReplay messageId
-func StateReplay(cid string, messageId string) string {
+func StateReplay(httpUrl string, cid string, messageId string) string {
 
 	json := `{ "jsonrpc": "2.0", "method":"Filecoin.StateReplay", "params": [[{"/":` + "\"" + cid + "\"" + `}],{"/":` + "\"" + messageId + "\"" + `}], "id": 1 }`
 	reader := bytes.NewReader([]byte(json))

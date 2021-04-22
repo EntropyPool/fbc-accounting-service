@@ -16,7 +16,7 @@ const (
 	/****************** config start *********************/
 	AccountingDomain = "accounting.npool.top"
 
-	RegisterDomain = "127.0.0.1"
+	RegisterDomain = "etcd-register.npool.top"
 	RegisterPort   = "7101"
 	ServerIp       = "106.74.7.5"
 	UserName       = "entropytest"
