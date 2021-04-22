@@ -89,7 +89,7 @@ func NewAccountingServer(configFile string) *AccountingServer {
 		//Post(fmt.Sprintf("http://%v%v", host, types.GetRegisterEtcdAPI))
 	if err != nil {
 		log.Errorf(log.Fields{}, "heartbeat error: %v", err)
-		//return nil
+		return nil
 	} else {
 		if resp.StatusCode() != 200 {
 			fmt.Println("NON-200 return")
